@@ -72,17 +72,12 @@ def feed(
     page_size: int = Query(default=20, ge=1, le=100),
     db: Session = Depends(get_db),
 ) -> FeedResponse:
-    """Return saved updates immediately, then refresh in the background if stale.
+    """Return saved PostgreSQL updates.
 
-    This is the stale-while-revalidate path:
-    1. React asks for the feed.
-    2. FastAPI returns PostgreSQL rows right away.
-    3. If those rows are stale, a background Tavily job starts separately.
-    4. React polls refresh status and refetches when the job finishes.
+    Tavily is not called from this endpoint. New data is fetched only when the
+    user clicks "Check for latest updates", which calls POST /api/refresh.
     """
     seed_database(db)
-    stale = refresh_coordinator.is_stale(technology_slugs)
-    refresh_started = refresh_coordinator.start_if_stale(technology_slugs)
     refresh_status = refresh_coordinator.status()
     base = apply_filters(updates_query(db), technology_slugs, category, impact_level, date_from, date_to)
     total = base.count()
@@ -98,9 +93,8 @@ def feed(
         requiring_action=db.query(DeveloperUpdate).filter(DeveloperUpdate.recommended_action.is_not(None)).count(),
         technologies_tracked=len(set(technology_slugs or [])) or db.query(Technology).filter(Technology.active.is_(True)).count(),
         last_updated_at=db.query(func.max(DeveloperUpdate.updated_at)).scalar(),
-        refresh_running=refresh_status["running"] or refresh_started,
-        stale=stale,
-        refresh_started=refresh_started,
+        refresh_running=refresh_status["running"],
+        refresh_started=False,
         cooldown_until=refresh_status["cooldown_until"],
     )
 
@@ -159,7 +153,6 @@ def search(q: str, page: int = 1, page_size: int = 20, db: Session = Depends(get
         technologies_tracked=len(slugs),
         last_updated_at=db.query(func.max(DeveloperUpdate.updated_at)).scalar(),
         refresh_running=refresh_coordinator.status()["running"],
-        stale=False,
         refresh_started=False,
         cooldown_until=refresh_coordinator.status()["cooldown_until"],
     )

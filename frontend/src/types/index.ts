@@ -45,7 +45,6 @@ export type FeedResponse = {
   technologies_tracked: number;
   last_updated_at: string | null;
   refresh_running: boolean;
-  stale: boolean;
   refresh_started: boolean;
   cooldown_until: string | null;
 };

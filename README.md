@@ -7,7 +7,7 @@ DevPulse AI is a production-ready MVP web platform that collects trusted develop
 ## Stack
 
 - Frontend: React, Vite, TypeScript, Tailwind CSS, shadcn-style UI primitives, React Router, TanStack Query
-- Backend: Python, FastAPI, Pydantic, SQLAlchemy, Alembic, APScheduler, Pytest
+- Backend: Python, FastAPI, Pydantic, SQLAlchemy, Alembic, Pytest
 - Database: PostgreSQL
 - External content provider: Tavily Search, Tavily Extract, Tavily Crawl only
 

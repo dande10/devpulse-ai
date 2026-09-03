@@ -259,11 +259,11 @@ export default function App() {
                 {refreshRunning ? "Checking latest" : "Check for latest updates"}
               </Button>
             </div>
-            {(feed.data?.stale || refreshRunning || latestRequest.data?.message) && (
+            {(refreshRunning || latestRequest.data?.message) && (
               <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
                 {refreshRunning
                   ? "Saved updates are shown while Tavily checks trusted sources in the background."
-                  : latestRequest.data?.message ?? "Saved updates are shown while newer results are prepared."}
+                  : latestRequest.data?.message}
               </p>
             )}
           </section>

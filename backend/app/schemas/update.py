@@ -45,6 +45,5 @@ class FeedResponse(BaseModel):
     technologies_tracked: int
     last_updated_at: datetime | None
     refresh_running: bool = False
-    stale: bool = False
     refresh_started: bool = False
     cooldown_until: datetime | None = None

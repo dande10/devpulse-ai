@@ -1,12 +1,10 @@
 from datetime import datetime, timedelta, timezone
 from threading import Lock, Thread
 
-from sqlalchemy import func
-
 from app.core.config import settings
 from app.database.session import SessionLocal
 from app.ingestion.pipeline import IngestionPipeline
-from app.models import DeveloperUpdate, IngestionRun, Technology
+from app.models import IngestionRun
 
 
 class RefreshCoordinator:
@@ -14,6 +12,7 @@ class RefreshCoordinator:
 
     The coordinator prevents duplicate refreshes, remembers the current status
     for the frontend, and applies a cooldown to user-triggered refreshes.
+    Tavily refreshes start only when the user clicks the refresh button.
     """
 
     def __init__(self) -> None:
@@ -39,23 +38,6 @@ class RefreshCoordinator:
                 "cooldown_until": cooldown_until,
             }
 
-    def is_stale(self, technology_slugs: list[str] | None = None) -> bool:
-        """Return True when saved updates are older than the configured interval."""
-        with SessionLocal() as db:
-            query = db.query(func.max(DeveloperUpdate.updated_at))
-            if technology_slugs:
-                query = query.join(DeveloperUpdate.technologies).filter(Technology.slug.in_(technology_slugs))
-            last_update = query.scalar()
-            if not last_update:
-                return True
-            return last_update < datetime.now(timezone.utc) - timedelta(hours=settings.feed_stale_after_hours)
-
-    def start_if_stale(self, technology_slugs: list[str] | None = None) -> bool:
-        """Start background ingestion only when the saved feed is stale."""
-        if not self.is_stale(technology_slugs):
-            return False
-        return self.start_background(technology_slugs, reason="stale-feed")
-
     def request_user_refresh(self, technology_slugs: list[str] | None = None) -> tuple[bool, str]:
         """Handle the user's 'Check for latest updates' button."""
         now = datetime.now(timezone.utc)
@@ -71,7 +53,7 @@ class RefreshCoordinator:
         self.start_background(technology_slugs, reason="user-request")
         return True, "Refresh started."
 
-    def start_background(self, technology_slugs: list[str] | None = None, reason: str = "scheduled") -> bool:
+    def start_background(self, technology_slugs: list[str] | None = None, reason: str = "user-request") -> bool:
         """Run ingestion in a daemon thread so API responses do not block."""
         with self._lock:
             if self._running:
