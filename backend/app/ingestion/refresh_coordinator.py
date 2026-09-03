@@ -10,6 +10,12 @@ from app.models import DeveloperUpdate, IngestionRun, Technology
 
 
 class RefreshCoordinator:
+    """Controls background Tavily refresh jobs.
+
+    The coordinator prevents duplicate refreshes, remembers the current status
+    for the frontend, and applies a cooldown to user-triggered refreshes.
+    """
+
     def __init__(self) -> None:
         self._lock = Lock()
         self._running = False
@@ -34,6 +40,7 @@ class RefreshCoordinator:
             }
 
     def is_stale(self, technology_slugs: list[str] | None = None) -> bool:
+        """Return True when saved updates are older than the configured interval."""
         with SessionLocal() as db:
             query = db.query(func.max(DeveloperUpdate.updated_at))
             if technology_slugs:
@@ -44,11 +51,13 @@ class RefreshCoordinator:
             return last_update < datetime.now(timezone.utc) - timedelta(hours=settings.feed_stale_after_hours)
 
     def start_if_stale(self, technology_slugs: list[str] | None = None) -> bool:
+        """Start background ingestion only when the saved feed is stale."""
         if not self.is_stale(technology_slugs):
             return False
         return self.start_background(technology_slugs, reason="stale-feed")
 
     def request_user_refresh(self, technology_slugs: list[str] | None = None) -> tuple[bool, str]:
+        """Handle the user's 'Check for latest updates' button."""
         now = datetime.now(timezone.utc)
         with self._lock:
             if self._running:
@@ -63,6 +72,7 @@ class RefreshCoordinator:
         return True, "Refresh started."
 
     def start_background(self, technology_slugs: list[str] | None = None, reason: str = "scheduled") -> bool:
+        """Run ingestion in a daemon thread so API responses do not block."""
         with self._lock:
             if self._running:
                 return False
@@ -75,6 +85,7 @@ class RefreshCoordinator:
         return True
 
     def _run(self, technology_slugs: list[str] | None, reason: str) -> None:
+        """Open a database session and execute the Tavily ingestion pipeline."""
         try:
             with SessionLocal() as db:
                 IngestionPipeline(db).refresh(technology_slugs, reason=reason)

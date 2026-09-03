@@ -47,6 +47,11 @@ TECHNOLOGIES = [
 
 
 def seed_database(db: Session) -> None:
+    """Create or update technology configuration.
+
+    This does not create Source or DeveloperUpdate rows. Those come from Tavily
+    ingestion only.
+    """
     existing_by_slug = {technology.slug: technology for technology in db.query(Technology).all()}
     for name, slug, icon, keywords, trusted, official in TECHNOLOGIES:
         query_templates = [

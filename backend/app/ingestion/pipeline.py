@@ -10,11 +10,14 @@ from app.services.tavily.client import TavilyClient
 
 
 class IngestionPipeline:
+    """Fetch, clean, deduplicate, classify, and save developer updates."""
+
     def __init__(self, db: Session, tavily: TavilyClient | None = None) -> None:
         self.db = db
         self.tavily = tavily or TavilyClient()
 
     def refresh(self, technology_slugs: list[str] | None = None, reason: str = "manual") -> list[IngestionRun]:
+        """Refresh all active technologies or only the requested technology slugs."""
         query = self.db.query(Technology).filter(Technology.active.is_(True))
         if technology_slugs:
             query = query.filter(Technology.slug.in_(technology_slugs))
@@ -25,6 +28,7 @@ class IngestionPipeline:
         return runs
 
     def _refresh_technology(self, technology: Technology, reason: str) -> IngestionRun:
+        """Run Tavily Search/Extract/Crawl for one technology and record the result."""
         run = IngestionRun(technology=technology, tavily_endpoint="search/extract/crawl", status="running")
         self.db.add(run)
         self.db.flush()
@@ -37,6 +41,7 @@ class IngestionPipeline:
         try:
             candidate_urls: list[str] = []
             for template in technology.query_templates:
+                # Search finds candidate update URLs from trusted/official domains.
                 search = self.tavily.search_updates(template, domains=technology.trusted_domains or technology.official_domains)
                 results = search.get("results", [])
                 run.results_found += len(results)
@@ -47,12 +52,15 @@ class IngestionPipeline:
 
             if len(set(candidate_urls)) < 3 and technology.official_domains:
                 try:
+                    # Crawl is best-effort because some Tavily plans can use Search/Extract
+                    # but return 401 for Crawl. Search/Extract results still continue.
                     candidate_urls.extend(self._discover_official_update_pages(technology))
                 except Exception as exc:
                     run.error_message = f"Crawl discovery skipped: {exc}"
 
             new_urls = []
             for url in dict.fromkeys(candidate_urls):
+                # URL dedupe prevents extracting and saving the same page repeatedly.
                 if self.db.query(DeveloperUpdate).filter(DeveloperUpdate.canonical_url == url).first():
                     run.duplicates_skipped += 1
                 else:
@@ -93,6 +101,7 @@ class IngestionPipeline:
         return any(domain == allowed or domain.endswith(f".{allowed}") for allowed in trusted)
 
     def _save_extracted_update(self, technology: Technology, result: dict) -> bool:
+        """Save one Tavily Extract result if it looks like a useful developer update."""
         url = canonicalize_url(result.get("url", ""))
         content = self._clean_extracted_content(result.get("raw_content") or result.get("content") or "")
         title = result.get("title") or url
@@ -110,6 +119,7 @@ class IngestionPipeline:
             self.db.flush()
 
         lower = f"{title} {url} {content}".lower()
+        # Classification is deterministic and source-grounded. Unknown values stay broad.
         category = "Releases"
         if any(marker in lower for marker in ("security advisory", "security bulletin", "cve-", "vulnerability", "critical vulnerability")):
             category = "Security"

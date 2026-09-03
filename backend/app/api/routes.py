@@ -18,17 +18,23 @@ router = APIRouter(prefix="/api")
 
 @router.get("/health")
 def health(db: Session = Depends(get_db)) -> dict:
+    """Simple backend status check used by local development and deployment monitors."""
     seed_database(db)
     return {"status": "ok", "tavily_configured": bool(settings.tavily_api_key)}
 
 
 @router.get("/technologies", response_model=list[TechnologyRead])
 def technologies(db: Session = Depends(get_db)) -> list[Technology]:
+    """Return configurable technology stack options for the React UI."""
     seed_database(db)
     return db.query(Technology).filter(Technology.active.is_(True)).order_by(Technology.name).all()
 
 
 def updates_query(db: Session):
+    """Base PostgreSQL query for feed/search pages.
+
+    Tavily is not called here. This keeps filtering, sorting, and pagination fast.
+    """
     return (
         db.query(DeveloperUpdate)
         .options(joinedload(DeveloperUpdate.source), joinedload(DeveloperUpdate.technologies))
@@ -66,6 +72,14 @@ def feed(
     page_size: int = Query(default=20, ge=1, le=100),
     db: Session = Depends(get_db),
 ) -> FeedResponse:
+    """Return saved updates immediately, then refresh in the background if stale.
+
+    This is the stale-while-revalidate path:
+    1. React asks for the feed.
+    2. FastAPI returns PostgreSQL rows right away.
+    3. If those rows are stale, a background Tavily job starts separately.
+    4. React polls refresh status and refetches when the job finishes.
+    """
     seed_database(db)
     stale = refresh_coordinator.is_stale(technology_slugs)
     refresh_started = refresh_coordinator.start_if_stale(technology_slugs)
@@ -108,6 +122,7 @@ def update_detail(update_id: int, db: Session = Depends(get_db)) -> DeveloperUpd
 
 @router.get("/search", response_model=FeedResponse)
 def search(q: str, page: int = 1, page_size: int = 20, db: Session = Depends(get_db)) -> FeedResponse:
+    """Search saved PostgreSQL updates without spending Tavily credits."""
     seed_database(db)
     text = f"%{q.lower()}%"
     query = updates_query(db).filter(
@@ -152,17 +167,24 @@ def search(q: str, page: int = 1, page_size: int = 20, db: Session = Depends(get
 
 @router.get("/refresh/status")
 def refresh_status() -> dict:
+    """Tell React whether a background Tavily refresh is currently running."""
     return refresh_coordinator.status()
 
 
 @router.post("/refresh")
 def request_refresh(technology_slugs: list[str] | None = Body(default=None)) -> dict:
+    """User-facing 'Check for latest updates' endpoint.
+
+    It starts Tavily ingestion in the background and uses a shared cooldown so
+    repeated clicks do not burn API credits.
+    """
     started, message = refresh_coordinator.request_user_refresh(technology_slugs)
     return {"started": started, "message": message, **refresh_coordinator.status()}
 
 
 @router.post("/admin/refresh")
 def admin_refresh(technology_slugs: list[str] | None = None, db: Session = Depends(get_db)) -> dict:
+    """Manual refresh endpoint for debugging or operational use."""
     seed_database(db)
     runs = IngestionPipeline(db).refresh(technology_slugs)
     return {"runs": [{"id": run.id, "status": run.status, "error_message": run.error_message} for run in runs]}
@@ -170,6 +192,7 @@ def admin_refresh(technology_slugs: list[str] | None = None, db: Session = Depen
 
 @router.get("/admin/ingestion-runs")
 def ingestion_runs(db: Session = Depends(get_db)) -> list[dict]:
+    """Return recent ingestion history: saved count, duplicates, failures, timing."""
     seed_database(db)
     runs = db.query(IngestionRun).order_by(IngestionRun.started_at.desc()).limit(50).all()
     return [
