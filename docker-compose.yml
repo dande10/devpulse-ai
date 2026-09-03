@@ -17,12 +17,11 @@ services:
 
   backend:
     build: ./backend
+    env_file:
+      - ./backend/.env
     environment:
       DATABASE_URL: postgresql+psycopg://postgres:postgres@db:5432/devpulse
-      TAVILY_API_KEY: ${TAVILY_API_KEY:-}
-      ADMIN_API_KEY: ${ADMIN_API_KEY:-dev-admin-key}
       CORS_ORIGINS: http://localhost:5173
-      TAVILY_MAX_RESULTS: 10
     ports:
       - "8000:8000"
     depends_on:
