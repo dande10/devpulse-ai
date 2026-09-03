@@ -122,19 +122,19 @@ def seed_database(db: Session) -> None:
             )
     db.commit()
 
-    if db.query(Source).count() == 0:
-        db.add_all(
-            [
-                Source(name="React Blog", domain="react.dev", source_type="official", official=True, trust_score=100),
-                Source(name="Expo Changelog", domain="expo.dev", source_type="official", official=True, trust_score=100),
-                Source(name="Python Release Notes", domain="python.org", source_type="official", official=True, trust_score=100),
-                Source(name="FastAPI Release Notes", domain="fastapi.tiangolo.com", source_type="official", official=True, trust_score=100),
-            ]
-        )
-        db.commit()
-
     if settings.tavily_api_key or db.query(DeveloperUpdate).count() > 0:
         return
+
+    demo_sources = [
+        Source(name="React Blog", domain="react.dev", source_type="official", official=True, trust_score=100),
+        Source(name="Expo Changelog", domain="expo.dev", source_type="official", official=True, trust_score=100),
+        Source(name="Python Release Notes", domain="python.org", source_type="official", official=True, trust_score=100),
+        Source(name="FastAPI Release Notes", domain="fastapi.tiangolo.com", source_type="official", official=True, trust_score=100),
+    ]
+    for source in demo_sources:
+        if not db.query(Source).filter(Source.domain == source.domain).first():
+            db.add(source)
+    db.commit()
 
     tech_by_slug = {technology.slug: technology for technology in db.query(Technology).all()}
     source_by_domain = {source.domain: source for source in db.query(Source).all()}
