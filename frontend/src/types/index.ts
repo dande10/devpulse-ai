@@ -44,4 +44,17 @@ export type FeedResponse = {
   requiring_action: number;
   technologies_tracked: number;
   last_updated_at: string | null;
+  refresh_running: boolean;
+  stale: boolean;
+  refresh_started: boolean;
+  cooldown_until: string | null;
+};
+
+export type RefreshStatus = {
+  running: boolean;
+  last_started_at: string | null;
+  last_completed_at: string | null;
+  last_status: string;
+  last_error: string | null;
+  cooldown_until: string | null;
 };

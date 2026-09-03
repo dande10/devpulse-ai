@@ -10,6 +10,11 @@ class Settings(BaseSettings):
     admin_api_key: str = "dev-admin-key"
     cors_origins: str = "http://localhost:5173"
     tavily_max_results: int = 10
+    tavily_timeout_seconds: float = 8.0
+    tavily_retries: int = 2
+    feed_stale_after_hours: int = 6
+    scheduled_refresh_hours: int = 4
+    user_refresh_cooldown_seconds: int = 300
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 

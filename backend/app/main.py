@@ -4,6 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.routes import router
 from app.core.config import settings
+from app.ingestion.refresh_coordinator import refresh_coordinator
 
 app = FastAPI(title="DevPulse AI API", version="0.1.0")
 app.add_middleware(
@@ -21,6 +22,14 @@ scheduler = BackgroundScheduler(timezone="UTC")
 @app.on_event("startup")
 def start_scheduler() -> None:
     if not scheduler.running:
+        scheduler.add_job(
+            refresh_coordinator.start_background,
+            "interval",
+            hours=settings.scheduled_refresh_hours,
+            id="scheduled-tavily-ingestion",
+            replace_existing=True,
+            kwargs={"reason": "scheduled"},
+        )
         scheduler.start()
 
 

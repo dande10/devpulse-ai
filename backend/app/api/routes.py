@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Body, Depends, HTTPException, Query
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session, joinedload
 
@@ -8,6 +8,7 @@ from app.api.deps import require_admin
 from app.core.config import settings
 from app.database.session import get_db
 from app.ingestion.pipeline import IngestionPipeline
+from app.ingestion.refresh_coordinator import refresh_coordinator
 from app.models import DeveloperUpdate, IngestionRun, Technology
 from app.schemas.technology import TechnologyRead
 from app.schemas.update import DeveloperUpdateRead, FeedResponse
@@ -59,6 +60,9 @@ def feed(
     db: Session = Depends(get_db),
 ) -> FeedResponse:
     seed_database(db)
+    stale = refresh_coordinator.is_stale(technology_slugs)
+    refresh_started = refresh_coordinator.start_if_stale(technology_slugs)
+    refresh_status = refresh_coordinator.status()
     base = apply_filters(updates_query(db), technology_slugs, category, impact_level, date_from, date_to)
     total = base.count()
     order = DeveloperUpdate.published_at.asc() if sort == "oldest" else DeveloperUpdate.published_at.desc().nullslast()
@@ -73,6 +77,10 @@ def feed(
         requiring_action=db.query(DeveloperUpdate).filter(DeveloperUpdate.recommended_action.is_not(None)).count(),
         technologies_tracked=len(set(technology_slugs or [])) or db.query(Technology).filter(Technology.active.is_(True)).count(),
         last_updated_at=db.query(func.max(DeveloperUpdate.updated_at)).scalar(),
+        refresh_running=refresh_status["running"] or refresh_started,
+        stale=stale,
+        refresh_started=refresh_started,
+        cooldown_until=refresh_status["cooldown_until"],
     )
 
 
@@ -128,7 +136,22 @@ def search(q: str, page: int = 1, page_size: int = 20, db: Session = Depends(get
         requiring_action=sum(1 for item in items if item.recommended_action),
         technologies_tracked=len(slugs),
         last_updated_at=db.query(func.max(DeveloperUpdate.updated_at)).scalar(),
+        refresh_running=refresh_coordinator.status()["running"],
+        stale=False,
+        refresh_started=False,
+        cooldown_until=refresh_coordinator.status()["cooldown_until"],
     )
+
+
+@router.get("/refresh/status")
+def refresh_status() -> dict:
+    return refresh_coordinator.status()
+
+
+@router.post("/refresh")
+def request_refresh(technology_slugs: list[str] | None = Body(default=None)) -> dict:
+    started, message = refresh_coordinator.request_user_refresh(technology_slugs)
+    return {"started": started, "message": message, **refresh_coordinator.status()}
 
 
 @router.post("/admin/refresh", dependencies=[Depends(require_admin)])

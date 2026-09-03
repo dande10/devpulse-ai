@@ -3,6 +3,7 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy.orm import Session
 
 from app.models import DeveloperUpdate, Source, Technology
+from app.core.config import settings
 from app.services.normalize import canonicalize_url, content_fingerprint
 
 TECHNOLOGIES = [
@@ -60,7 +61,7 @@ def seed_database(db: Session) -> None:
         )
         db.commit()
 
-    if db.query(DeveloperUpdate).count() > 0:
+    if settings.tavily_api_key or db.query(DeveloperUpdate).count() > 0:
         return
 
     tech_by_slug = {technology.slug: technology for technology in db.query(Technology).all()}

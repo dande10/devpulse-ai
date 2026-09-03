@@ -1,5 +1,5 @@
-import { useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import {
   Bookmark,
   BookmarkCheck,
@@ -18,7 +18,7 @@ import { Button } from "../components/ui/button";
 import { Card } from "../components/ui/card";
 import { Input } from "../components/ui/input";
 import { useLocalStorage } from "../hooks/useLocalStorage";
-import { getFeed, getTechnologies } from "../services/api";
+import { getFeed, getRefreshStatus, getTechnologies, requestLatestUpdates } from "../services/api";
 import type { DeveloperUpdate } from "../types";
 
 const categories = ["All", "Breaking", "Security", "Releases", "Deprecations", "Documentation", "AI Tools"];
@@ -130,6 +130,24 @@ export default function App() {
     queryKey: ["feed", selected, category, query],
     queryFn: () => getFeed({ technologySlugs: selected, category, query }),
   });
+  const refreshStatus = useQuery({
+    queryKey: ["refresh-status"],
+    queryFn: getRefreshStatus,
+    refetchInterval: (query) => (query.state.data?.running ? 2500 : false),
+  });
+  const latestRequest = useMutation({
+    mutationFn: () => requestLatestUpdates(selected),
+    onSuccess: () => refreshStatus.refetch(),
+  });
+  const wasRunning = useRef(false);
+
+  useEffect(() => {
+    const running = Boolean(refreshStatus.data?.running || feed.data?.refresh_running);
+    if (wasRunning.current && !running) {
+      feed.refetch();
+    }
+    wasRunning.current = running;
+  }, [feed, refreshStatus.data?.running]);
 
   const selectedTech = useMemo(
     () => technologies.data?.filter((tech) => selected.includes(tech.slug)) ?? [],
@@ -143,6 +161,9 @@ export default function App() {
   const toggleBookmark = (id: number) => {
     setBookmarks((current) => (current.includes(id) ? current.filter((item) => item !== id) : [...current, id]));
   };
+  const refreshRunning = Boolean(feed.data?.refresh_running || refreshStatus.data?.running || latestRequest.isPending);
+  const cooldownUntil = refreshStatus.data?.cooldown_until ?? feed.data?.cooldown_until;
+  const cooldownActive = cooldownUntil ? new Date(cooldownUntil).getTime() > Date.now() : false;
 
   return (
     <div className="min-h-screen bg-background">
@@ -205,8 +226,28 @@ export default function App() {
 
         <main className="min-w-0 space-y-5">
           <section>
-            <h1 className="text-3xl font-bold tracking-normal">Good morning, Developer</h1>
-            <p className="mt-1 text-slate-600 dark:text-slate-300">Here’s what changed across your stack.</p>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+              <div>
+                <h1 className="text-3xl font-bold tracking-normal">Good morning, Developer</h1>
+                <p className="mt-1 text-slate-600 dark:text-slate-300">Here’s what changed across your stack.</p>
+              </div>
+              <Button
+                variant="outline"
+                disabled={refreshRunning || cooldownActive}
+                onClick={() => latestRequest.mutate()}
+                aria-live="polite"
+              >
+                <RefreshCw size={18} className={refreshRunning ? "animate-spin" : ""} />
+                {refreshRunning ? "Checking latest" : "Check for latest updates"}
+              </Button>
+            </div>
+            {(feed.data?.stale || refreshRunning || latestRequest.data?.message) && (
+              <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
+                {refreshRunning
+                  ? "Saved updates are shown while Tavily checks trusted sources in the background."
+                  : latestRequest.data?.message ?? "Saved updates are shown while newer results are prepared."}
+              </p>
+            )}
           </section>
 
           <div className="relative">
@@ -256,8 +297,8 @@ export default function App() {
           <Card className="p-4">
             <div className="flex items-center justify-between">
               <h2 className="text-sm font-semibold">Insights</h2>
-              <Button variant="ghost" aria-label="Refresh updates" onClick={() => feed.refetch()}>
-                <RefreshCw size={18} />
+              <Button variant="ghost" aria-label="Refetch saved feed" onClick={() => feed.refetch()}>
+                <RefreshCw size={18} className={refreshRunning ? "animate-spin" : ""} />
               </Button>
             </div>
             <div className="mt-4 grid gap-3">
@@ -277,6 +318,9 @@ export default function App() {
             <p className="mt-4 text-xs text-slate-500 dark:text-slate-400">
               Last updated {feed.data?.last_updated_at ? new Date(feed.data.last_updated_at).toLocaleString() : "Not specified"}
             </p>
+            {refreshStatus.data?.last_status && (
+              <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">Refresh status: {refreshStatus.data.last_status}</p>
+            )}
           </Card>
 
           <Card className="p-4">

@@ -10,7 +10,7 @@ class TavilyClient:
     def __init__(self, api_key: str | None = None) -> None:
         self.api_key = api_key or settings.tavily_api_key
         self.base_url = "https://api.tavily.com"
-        self.timeout = httpx.Timeout(20.0)
+        self.timeout = httpx.Timeout(settings.tavily_timeout_seconds)
 
     @property
     def configured(self) -> bool:
@@ -21,7 +21,7 @@ class TavilyClient:
             raise RuntimeError("TAVILY_API_KEY is not configured")
         body = {"api_key": self.api_key, **payload}
         last_error: Exception | None = None
-        for attempt in range(3):
+        for attempt in range(settings.tavily_retries):
             try:
                 with httpx.Client(timeout=self.timeout) as client:
                     response = client.post(f"{self.base_url}{path}", json=body)
