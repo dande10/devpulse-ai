@@ -20,8 +20,22 @@ TECHNOLOGIES = [
     ("Angular", "angular", "Ng", ["angular"], ["angular.dev"], ["angular.dev"]),
     ("Vue", "vue", "Vue", ["vue"], ["vuejs.org"], ["vuejs.org"]),
     ("Flutter", "flutter", "Fl", ["flutter"], ["flutter.dev"], ["flutter.dev"]),
-    ("Android", "android", "And", ["android"], ["developer.android.com"], ["developer.android.com"]),
-    ("iOS", "ios", "iOS", ["ios", "swift"], ["developer.apple.com"], ["developer.apple.com"]),
+    (
+        "Android",
+        "android",
+        "And",
+        ["android", "android developers", "android studio", "jetpack"],
+        ["developer.android.com", "android-developers.googleblog.com", "source.android.com"],
+        ["developer.android.com", "source.android.com"],
+    ),
+    (
+        "iOS",
+        "ios",
+        "iOS",
+        ["ios", "swift", "xcode", "apple developer"],
+        ["developer.apple.com", "swift.org"],
+        ["developer.apple.com", "swift.org"],
+    ),
     ("AWS", "aws", "AWS", ["aws"], ["aws.amazon.com"], ["aws.amazon.com"]),
     ("Azure", "azure", "Az", ["azure"], ["azure.microsoft.com"], ["azure.microsoft.com"]),
     (
@@ -69,6 +83,22 @@ def seed_database(db: Session) -> None:
                 "Google Cloud security bulletins latest",
                 "Google Cloud breaking changes migration guide",
                 "Google Cloud blog developer updates",
+            ]
+        if slug == "android":
+            query_templates = [
+                "Android Developers latest release notes",
+                "Android Studio latest release notes",
+                "Android security bulletin latest",
+                "Android Jetpack release notes latest",
+                "Android migration guide breaking changes",
+            ]
+        if slug == "ios":
+            query_templates = [
+                "Apple Developer iOS latest release notes",
+                "iOS SDK latest release notes developer",
+                "Xcode release notes latest",
+                "Swift release notes latest",
+                "Apple Developer security updates iOS",
             ]
         if slug in existing_by_slug:
             technology = existing_by_slug[slug]
