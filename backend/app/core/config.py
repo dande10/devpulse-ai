@@ -7,7 +7,6 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     database_url: str = "postgresql+psycopg://postgres:postgres@localhost:5432/devpulse"
     tavily_api_key: str | None = None
-    admin_api_key: str = "dev-admin-key"
     cors_origins: str = "http://localhost:5173"
     tavily_max_results: int = 10
     tavily_timeout_seconds: float = 8.0

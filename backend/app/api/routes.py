@@ -4,7 +4,6 @@ from fastapi import APIRouter, Body, Depends, HTTPException, Query
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session, joinedload
 
-from app.api.deps import require_admin
 from app.core.config import settings
 from app.database.session import get_db
 from app.ingestion.pipeline import IngestionPipeline
@@ -154,14 +153,14 @@ def request_refresh(technology_slugs: list[str] | None = Body(default=None)) -> 
     return {"started": started, "message": message, **refresh_coordinator.status()}
 
 
-@router.post("/admin/refresh", dependencies=[Depends(require_admin)])
+@router.post("/admin/refresh")
 def admin_refresh(technology_slugs: list[str] | None = None, db: Session = Depends(get_db)) -> dict:
     seed_database(db)
     runs = IngestionPipeline(db).refresh(technology_slugs)
     return {"runs": [{"id": run.id, "status": run.status, "error_message": run.error_message} for run in runs]}
 
 
-@router.get("/admin/ingestion-runs", dependencies=[Depends(require_admin)])
+@router.get("/admin/ingestion-runs")
 def ingestion_runs(db: Session = Depends(get_db)) -> list[dict]:
     seed_database(db)
     runs = db.query(IngestionRun).order_by(IngestionRun.started_at.desc()).limit(50).all()
