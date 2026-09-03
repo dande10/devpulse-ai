@@ -19,7 +19,7 @@ router = APIRouter(prefix="/api")
 @router.get("/health")
 def health(db: Session = Depends(get_db)) -> dict:
     seed_database(db)
-    return {"status": "ok", "demo_mode": not bool(settings.tavily_api_key)}
+    return {"status": "ok", "tavily_configured": bool(settings.tavily_api_key)}
 
 
 @router.get("/technologies", response_model=list[TechnologyRead])

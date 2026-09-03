@@ -23,4 +23,4 @@ Frontend: http://localhost:5173
 Backend: http://localhost:8000
 API health: http://localhost:8000/api/health
 
-The app runs in demo mode without `TAVILY_API_KEY`; seeded updates are inserted into PostgreSQL.
+Set `TAVILY_API_KEY` in `backend/.env` to ingest live developer updates. Without it, the app still starts but no external updates are fetched.

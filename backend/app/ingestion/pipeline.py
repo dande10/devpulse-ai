@@ -31,7 +31,7 @@ class IngestionPipeline:
         if not self.tavily.configured:
             run.status = "skipped"
             run.completed_at = datetime.now(timezone.utc)
-            run.error_message = "TAVILY_API_KEY is not configured; demo data remains active."
+            run.error_message = "TAVILY_API_KEY is not configured; external updates were not fetched."
             return run
 
         try:

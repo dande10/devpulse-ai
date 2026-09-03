@@ -1,11 +1,6 @@
-from datetime import datetime, timedelta, timezone
-
-from sqlalchemy import delete
 from sqlalchemy.orm import Session
 
-from app.models import DeveloperUpdate, Source, Technology, UpdateTechnology
-from app.core.config import settings
-from app.services.normalize import canonicalize_url, content_fingerprint
+from app.models import Technology
 
 TECHNOLOGIES = [
     ("React", "react", "React", ["react", "jsx"], ["react.dev"], ["react.dev"]),
@@ -52,24 +47,6 @@ TECHNOLOGIES = [
 
 
 def seed_database(db: Session) -> None:
-    if settings.tavily_api_key:
-        demo_ids = [
-            update_id
-            for (update_id,) in db.query(DeveloperUpdate.id)
-            .filter(
-                (DeveloperUpdate.raw_metadata["demo"].as_boolean().is_(True))
-                | DeveloperUpdate.summary.ilike("%fallback because interactive scripts did not run%")
-                | DeveloperUpdate.summary.ilike("%Solutions & technology Security Ecosystem Industries%")
-                | DeveloperUpdate.summary.ilike("%# Professional Agentic Architect%")
-                | DeveloperUpdate.summary.ilike("%Make Text Smaller%")
-            )
-            .all()
-        ]
-        if demo_ids:
-            db.execute(delete(UpdateTechnology).where(UpdateTechnology.update_id.in_(demo_ids)))
-            db.execute(delete(DeveloperUpdate).where(DeveloperUpdate.id.in_(demo_ids)))
-            db.commit()
-
     existing_by_slug = {technology.slug: technology for technology in db.query(Technology).all()}
     for name, slug, icon, keywords, trusted, official in TECHNOLOGIES:
         query_templates = [
@@ -120,98 +97,4 @@ def seed_database(db: Session) -> None:
                     refresh_interval_hours=24,
                 )
             )
-    db.commit()
-
-    if settings.tavily_api_key or db.query(DeveloperUpdate).count() > 0:
-        return
-
-    demo_sources = [
-        Source(name="React Blog", domain="react.dev", source_type="official", official=True, trust_score=100),
-        Source(name="Expo Changelog", domain="expo.dev", source_type="official", official=True, trust_score=100),
-        Source(name="Python Release Notes", domain="python.org", source_type="official", official=True, trust_score=100),
-        Source(name="FastAPI Release Notes", domain="fastapi.tiangolo.com", source_type="official", official=True, trust_score=100),
-    ]
-    for source in demo_sources:
-        if not db.query(Source).filter(Source.domain == source.domain).first():
-            db.add(source)
-    db.commit()
-
-    tech_by_slug = {technology.slug: technology for technology in db.query(Technology).all()}
-    source_by_domain = {source.domain: source for source in db.query(Source).all()}
-    now = datetime.now(timezone.utc)
-    demo_updates = [
-        (
-            "React compiler guidance expands for production adoption",
-            "https://react.dev/blog/react-compiler-demo",
-            "react.dev",
-            "The React team clarified compiler adoption paths and configuration expectations for application teams.",
-            "Teams can plan compiler trials with fewer assumptions about unsupported patterns.",
-            "Audit custom hooks and build tooling before enabling compiler checks.",
-            None,
-            "Documentation",
-            "Informational",
-            ["react", "typescript"],
-            1,
-        ),
-        (
-            "Expo SDK migration checklist highlights native module changes",
-            "https://expo.dev/changelog/sdk-migration-demo",
-            "expo.dev",
-            "Expo published a migration checklist covering config plugins, native modules, and dependency alignment.",
-            "Apps with custom native modules may need extra validation during upgrade windows.",
-            "Run the upgrade command in a branch and verify native module compatibility.",
-            "SDK latest",
-            "Breaking",
-            "Important",
-            ["expo", "react-native"],
-            2,
-        ),
-        (
-            "Python security release reminder for maintained branches",
-            "https://www.python.org/downloads/security-demo",
-            "python.org",
-            "Python maintainers reminded users to stay current on supported patch releases for security fixes.",
-            "Outdated runtimes can miss fixes that affect production services and CI images.",
-            "Check base images and runtime versions against supported Python branches.",
-            None,
-            "Security",
-            "Critical",
-            ["python", "docker"],
-            4,
-        ),
-        (
-            "FastAPI documentation refresh improves deployment examples",
-            "https://fastapi.tiangolo.com/release-notes/demo",
-            "fastapi.tiangolo.com",
-            "FastAPI documentation examples were reorganized around deployment and dependency practices.",
-            "Backend teams can compare their service layout with current framework guidance.",
-            None,
-            None,
-            "Documentation",
-            "Informational",
-            ["fastapi", "python"],
-            7,
-        ),
-    ]
-    for title, url, domain, summary, why, action, version, category, impact, slugs, days in demo_updates:
-        content = f"{summary} {why}"
-        db.add(
-            DeveloperUpdate(
-                title=title,
-                canonical_url=canonicalize_url(url),
-                source=source_by_domain[domain],
-                original_excerpt=summary,
-                extracted_content=content,
-                summary=summary,
-                why_it_matters=why,
-                recommended_action=action,
-                version=version,
-                category=category,
-                impact_level=impact,
-                published_at=now - timedelta(days=days),
-                content_fingerprint=content_fingerprint(title, content),
-                raw_metadata={"demo": True},
-                technologies=[tech_by_slug[slug] for slug in slugs],
-            )
-        )
     db.commit()
