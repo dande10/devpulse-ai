@@ -1,8 +1,9 @@
 from datetime import datetime, timedelta, timezone
 
+from sqlalchemy import delete
 from sqlalchemy.orm import Session
 
-from app.models import DeveloperUpdate, Source, Technology
+from app.models import DeveloperUpdate, Source, Technology, UpdateTechnology
 from app.core.config import settings
 from app.services.normalize import canonicalize_url, content_fingerprint
 
@@ -30,6 +31,18 @@ TECHNOLOGIES = [
 
 
 def seed_database(db: Session) -> None:
+    if settings.tavily_api_key:
+        demo_ids = [
+            update_id
+            for (update_id,) in db.query(DeveloperUpdate.id)
+            .filter(DeveloperUpdate.raw_metadata["demo"].as_boolean().is_(True))
+            .all()
+        ]
+        if demo_ids:
+            db.execute(delete(UpdateTechnology).where(UpdateTechnology.update_id.in_(demo_ids)))
+            db.execute(delete(DeveloperUpdate).where(DeveloperUpdate.id.in_(demo_ids)))
+            db.commit()
+
     if db.query(Technology).count() == 0:
         for name, slug, icon, keywords, trusted, official in TECHNOLOGIES:
             db.add(
