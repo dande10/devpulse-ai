@@ -29,7 +29,15 @@ def technologies(db: Session = Depends(get_db)) -> list[Technology]:
 
 
 def updates_query(db: Session):
-    return db.query(DeveloperUpdate).options(joinedload(DeveloperUpdate.source), joinedload(DeveloperUpdate.technologies))
+    return (
+        db.query(DeveloperUpdate)
+        .options(joinedload(DeveloperUpdate.source), joinedload(DeveloperUpdate.technologies))
+        .filter(~DeveloperUpdate.summary.ilike("%fallback because interactive scripts did not run%"))
+        .filter(~DeveloperUpdate.summary.ilike("%Solutions & technology Security Ecosystem Industries%"))
+        .filter(~DeveloperUpdate.summary.ilike("%Make Text Smaller%"))
+        .filter(~DeveloperUpdate.title.ilike("%Gartner MQ%"))
+        .filter(~DeveloperUpdate.title.ilike("%Certification%"))
+    )
 
 
 def apply_filters(query, technology_slugs, category, impact_level, date_from, date_to):

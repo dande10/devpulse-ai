@@ -1,3 +1,4 @@
+import re
 from datetime import datetime, timezone
 from urllib.parse import urlparse
 
@@ -93,8 +94,10 @@ class IngestionPipeline:
 
     def _save_extracted_update(self, technology: Technology, result: dict) -> bool:
         url = canonicalize_url(result.get("url", ""))
-        content = result.get("raw_content") or result.get("content") or ""
+        content = self._clean_extracted_content(result.get("raw_content") or result.get("content") or "")
         title = result.get("title") or url
+        if not self._is_useful_update(title, content):
+            return False
         fingerprint = content_fingerprint(title, content)
         if self.db.query(DeveloperUpdate).filter(DeveloperUpdate.content_fingerprint == fingerprint).first():
             return False
@@ -106,9 +109,9 @@ class IngestionPipeline:
             self.db.add(source)
             self.db.flush()
 
-        lower = f"{title} {content}".lower()
+        lower = f"{title} {url} {content}".lower()
         category = "Releases"
-        if "security" in lower or "cve" in lower:
+        if any(marker in lower for marker in ("security advisory", "security bulletin", "cve-", "vulnerability", "critical vulnerability")):
             category = "Security"
         elif "breaking" in lower or "migration" in lower:
             category = "Breaking"
@@ -120,7 +123,7 @@ class IngestionPipeline:
             category = "AI Tools"
 
         impact = "Critical" if category == "Security" else "Important" if category in {"Breaking", "Deprecations"} else "Informational"
-        summary = " ".join(content.split())[:420] or "Not specified."
+        summary = self._summary_from_content(content)
         self.db.add(
             DeveloperUpdate(
                 title=title[:300],
@@ -141,3 +144,48 @@ class IngestionPipeline:
             )
         )
         return True
+
+    def _clean_extracted_content(self, content: str) -> str:
+        heading = re.search(r"(#\s+[A-Z0-9][^\n]+)", content)
+        if heading:
+            content = content[heading.start() :]
+        cleaned = re.sub(r"!\[[^\]]*]\([^)]*\)", " ", content)
+        cleaned = re.sub(r"\[[^\]]*]\(javascript:[^)]*\)", " ", cleaned, flags=re.IGNORECASE)
+        cleaned = re.sub(r"\[[^\]]*]\([^)]*\)", " ", cleaned)
+        cleaned = re.sub(r"\*\*Notice:\*\*.*?(?=#|\n[A-Z]|\Z)", " ", cleaned, flags=re.IGNORECASE | re.DOTALL)
+        cleaned = re.sub(r"\*{2,}", " ", cleaned)
+        cleaned = re.sub(r"javascript:[^ ]+", " ", cleaned, flags=re.IGNORECASE)
+        cleaned = re.sub(r"Solutions & technology Security Ecosystem Industries", " ", cleaned)
+        cleaned = re.sub(r"Try Gemini Enterprise today", " ", cleaned, flags=re.IGNORECASE)
+        cleaned = re.sub(r"\s+", " ", cleaned)
+        return cleaned.strip()
+
+    def _is_useful_update(self, title: str, content: str) -> bool:
+        lower = f"{title} {content}".lower()
+        noisy_markers = (
+            "this page displays a fallback because interactive scripts did not run",
+            "make text smaller",
+            "reset any font size",
+        )
+        if any(marker in lower for marker in noisy_markers):
+            return False
+        update_markers = (
+            "release",
+            "changelog",
+            "security",
+            "cve",
+            "deprecated",
+            "deprecation",
+            "breaking",
+            "migration",
+            "upgrade",
+            "announcement",
+            "sdk",
+            "version",
+        )
+        return len(content) >= 120 and any(marker in lower for marker in update_markers)
+
+    def _summary_from_content(self, content: str) -> str:
+        sentences = re.split(r"(?<=[.!?])\s+", content)
+        summary = " ".join(sentence for sentence in sentences[:3] if sentence)
+        return summary[:420] or "Not specified."

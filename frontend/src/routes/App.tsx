@@ -40,6 +40,15 @@ function formatDate(value: string | null) {
   return new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", year: "numeric" }).format(new Date(value));
 }
 
+function displayText(value: string | null | undefined, fallback: string) {
+  const cleaned = (value ?? "")
+    .replace(/#+\s*/g, "")
+    .replace(/\*+/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  return cleaned || fallback;
+}
+
 function UpdateCard({
   update,
   bookmarked,
@@ -58,8 +67,8 @@ function UpdateCard({
   };
 
   return (
-    <Card className="p-5">
-      <div className="flex flex-col gap-4">
+    <Card className="overflow-hidden p-5">
+      <div className="flex min-w-0 flex-col gap-4">
         <div className="flex items-start justify-between gap-4">
           <div className="flex min-w-0 items-center gap-3">
             <span className="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-muted text-xs font-bold text-primary">
@@ -81,22 +90,24 @@ function UpdateCard({
         </div>
 
         <div>
-          <h2 className="text-lg font-semibold leading-snug">{update.title}</h2>
-          <p className="mt-2 text-sm leading-6 text-slate-600 dark:text-slate-300">{update.summary}</p>
+          <h2 className="break-words text-lg font-semibold leading-snug">{update.title}</h2>
+          <p className="mt-2 line-clamp-4 break-words text-sm leading-6 text-slate-600 dark:text-slate-300">
+            {displayText(update.summary, "Not specified.")}
+          </p>
         </div>
 
         <div className="grid gap-3 md:grid-cols-2">
           <div className="rounded-md border border-border p-3">
             <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Why it matters</p>
-            <p className="mt-1 text-sm">{update.why_it_matters ?? "Not specified."}</p>
+            <p className="mt-1 break-words text-sm">{displayText(update.why_it_matters, "Not specified.")}</p>
           </div>
           <div className="rounded-md border border-border p-3">
             <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Recommended action</p>
-            <p className="mt-1 text-sm">{update.recommended_action ?? "No action specified."}</p>
+            <p className="mt-1 break-words text-sm">{displayText(update.recommended_action, "No action specified.")}</p>
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
           <span className="rounded-md border border-border px-2 py-1 text-xs font-medium">{update.category}</span>
           <span className={`rounded-md border px-2 py-1 text-xs font-medium ${impactClass(update.impact_level)}`}>{update.impact_level}</span>
           <span className="rounded-md border border-border px-2 py-1 text-xs font-medium">Version: {update.version ?? "Not specified"}</span>
@@ -293,7 +304,7 @@ export default function App() {
           </div>
         </main>
 
-        <aside className="space-y-4">
+        <aside className="min-w-0 space-y-4">
           <Card className="p-4">
             <div className="flex items-center justify-between">
               <h2 className="text-sm font-semibold">Insights</h2>
