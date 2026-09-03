@@ -49,6 +49,13 @@ function displayText(value: string | null | undefined, fallback: string) {
   return cleaned || fallback;
 }
 
+function greeting() {
+  const hour = new Date().getHours();
+  if (hour < 12) return "Good morning, Developer";
+  if (hour < 17) return "Good afternoon, Developer";
+  return "Good evening, Developer";
+}
+
 function UpdateCard({
   update,
   bookmarked,
@@ -239,7 +246,7 @@ export default function App() {
           <section>
             <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
               <div>
-                <h1 className="text-3xl font-bold tracking-normal">Good morning, Developer</h1>
+                <h1 className="text-3xl font-bold tracking-normal">{greeting()}</h1>
                 <p className="mt-1 text-slate-600 dark:text-slate-300">Here’s what changed across your stack.</p>
               </div>
               <Button
