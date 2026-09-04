@@ -115,7 +115,15 @@ def update_detail(update_id: int, db: Session = Depends(get_db)) -> DeveloperUpd
 
 
 @router.get("/search", response_model=FeedResponse)
-def search(q: str, page: int = 1, page_size: int = 20, db: Session = Depends(get_db)) -> FeedResponse:
+def search(
+    q: str,
+    technology_slugs: list[str] | None = Query(default=None),
+    category: str | None = None,
+    impact_level: str | None = None,
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=100),
+    db: Session = Depends(get_db),
+) -> FeedResponse:
     """Search saved PostgreSQL updates without spending Tavily credits."""
     seed_database(db)
     text = f"%{q.lower()}%"
@@ -129,9 +137,14 @@ def search(q: str, page: int = 1, page_size: int = 20, db: Session = Depends(get
         )
     )
     lowered = q.lower()
-    slugs = [tech.slug for tech in db.query(Technology).all() if tech.name.lower() in lowered or tech.slug in lowered]
+    inferred_slugs = [tech.slug for tech in db.query(Technology).all() if tech.name.lower() in lowered or tech.slug in lowered]
+    slugs = technology_slugs or inferred_slugs
     if slugs:
         query = query.join(DeveloperUpdate.technologies).filter(Technology.slug.in_(slugs))
+    if category and category != "All":
+        query = query.filter(DeveloperUpdate.category == category)
+    if impact_level:
+        query = query.filter(DeveloperUpdate.impact_level == impact_level)
     if "this month" in lowered:
         query = query.filter(DeveloperUpdate.published_at >= datetime.now(timezone.utc) - timedelta(days=31))
     if "security" in lowered:
@@ -150,7 +163,7 @@ def search(q: str, page: int = 1, page_size: int = 20, db: Session = Depends(get
         page_size=page_size,
         new_updates=total,
         requiring_action=sum(1 for item in items if item.recommended_action),
-        technologies_tracked=len(slugs),
+        technologies_tracked=len(set(technology_slugs or slugs)),
         last_updated_at=db.query(func.max(DeveloperUpdate.updated_at)).scalar(),
         refresh_running=refresh_coordinator.status()["running"],
         refresh_started=False,
