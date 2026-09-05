@@ -32,14 +32,15 @@ class TavilyClient:
                 time.sleep(0.5 * (2**attempt))
         raise RuntimeError(f"Tavily request failed: {last_error}") from last_error
 
-    def search_updates(self, query: str, domains: list[str] | None = None, days: int = 30) -> dict[str, Any]:
+    def search_updates(self, query: str, domains: list[str] | None = None, days: int = 30, topic: str = "general") -> dict[str, Any]:
         payload: dict[str, Any] = {
             "query": query,
             "max_results": settings.tavily_max_results,
             "search_depth": "advanced",
-            "topic": "news",
-            "days": days,
+            "topic": topic,
         }
+        if topic == "news":
+            payload["days"] = days
         if domains:
             payload["include_domains"] = domains
         return self._post("/search", payload)

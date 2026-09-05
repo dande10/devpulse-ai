@@ -13,7 +13,7 @@ TECHNOLOGIES = [
     ("Node.js", "nodejs", "Node", ["node.js", "node"], ["nodejs.org"], ["nodejs.org"]),
     ("Next.js", "nextjs", "Next", ["next.js", "nextjs"], ["nextjs.org"], ["nextjs.org"]),
     ("Angular", "angular", "Ng", ["angular"], ["angular.dev"], ["angular.dev"]),
-    ("Vue", "vue", "Vue", ["vue"], ["vuejs.org"], ["vuejs.org"]),
+    ("Vue", "vue", "Vue", ["vue", "vue.js", "vuejs"], ["vuejs.org", "blog.vuejs.org"], ["vuejs.org", "blog.vuejs.org"]),
     ("Flutter", "flutter", "Fl", ["flutter"], ["flutter.dev"], ["flutter.dev"]),
     (
         "Android",
@@ -43,6 +43,38 @@ TECHNOLOGIES = [
     ),
     ("Docker", "docker", "Doc", ["docker"], ["docs.docker.com"], ["docs.docker.com"]),
     ("Kubernetes", "kubernetes", "K8s", ["kubernetes"], ["kubernetes.io"], ["kubernetes.io"]),
+    (
+        "H-1B Visa",
+        "h1b",
+        "H1B",
+        ["h-1b", "h1b", "h-1b visa", "specialty occupation"],
+        ["uscis.gov", "travel.state.gov", "federalregister.gov"],
+        ["uscis.gov", "travel.state.gov"],
+    ),
+    (
+        "H-4 EAD",
+        "h4-ead",
+        "H4",
+        ["h-4 ead", "h4 ead", "h-4 employment authorization", "form i-765"],
+        ["uscis.gov", "federalregister.gov"],
+        ["uscis.gov"],
+    ),
+    (
+        "EB-1 Green Card",
+        "eb1",
+        "EB1",
+        ["eb-1", "eb1", "employment-based first preference", "extraordinary ability"],
+        ["uscis.gov", "travel.state.gov"],
+        ["uscis.gov", "travel.state.gov"],
+    ),
+    (
+        "Visa Bulletin",
+        "visa-bulletin",
+        "Visa",
+        ["visa bulletin", "priority date", "final action dates", "dates for filing"],
+        ["travel.state.gov", "uscis.gov"],
+        ["travel.state.gov", "uscis.gov"],
+    ),
 ]
 
 
@@ -81,6 +113,43 @@ def seed_database(db: Session) -> None:
                 "Xcode release notes latest",
                 "Swift release notes latest",
                 "Apple Developer security updates iOS",
+            ]
+        if slug == "vue":
+            query_templates = [
+                "Vue.js official release notes latest",
+                "Vue.js changelog latest breaking changes",
+                "Vue.js migration guide latest",
+                "Vue.js security advisories latest",
+                "Vue.js official blog developer updates",
+            ]
+        if slug == "h1b":
+            query_templates = [
+                "USCIS latest H-1B visa updates",
+                "USCIS H-1B cap registration latest update",
+                "USCIS H-1B specialty occupation rule update",
+                "Federal Register H-1B visa latest rule",
+                "Department of State H-1B visa update",
+            ]
+        if slug == "h4-ead":
+            query_templates = [
+                "USCIS latest H-4 EAD updates",
+                "USCIS H-4 employment authorization latest update",
+                "USCIS Form I-765 H-4 EAD latest",
+                "Federal Register H-4 EAD latest rule",
+            ]
+        if slug == "eb1":
+            query_templates = [
+                "USCIS latest EB-1 updates",
+                "USCIS EB-1 extraordinary ability latest update",
+                "Department of State EB-1 priority date update",
+                "USCIS employment based first preference update",
+            ]
+        if slug == "visa-bulletin":
+            query_templates = [
+                "Department of State latest visa bulletin",
+                "USCIS latest visa bulletin adjustment of status filing chart",
+                "Visa bulletin final action dates latest",
+                "Visa bulletin dates for filing latest",
             ]
         if slug in existing_by_slug:
             technology = existing_by_slug[slug]

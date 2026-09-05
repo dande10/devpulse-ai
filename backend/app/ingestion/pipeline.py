@@ -1,201 +1,143 @@
-import re
-from datetime import datetime, timezone
+import logging
 from urllib.parse import urlparse
 
 from sqlalchemy.orm import Session
 
-from app.models import DeveloperUpdate, IngestionRun, Source, Technology
-from app.services.normalize import canonicalize_url, content_fingerprint
+from app.ingestion import processor
+from app.models import IngestionRun, Technology
+from app.repositories.updates import UpdateRepository
+from app.services.normalize import canonicalize_url
 from app.services.tavily.client import TavilyClient
+
+logger = logging.getLogger(__name__)
 
 
 class IngestionPipeline:
-    """Fetch, clean, deduplicate, classify, and save developer updates."""
+    """Coordinate Tavily discovery, processing, and PostgreSQL saves."""
 
-    def __init__(self, db: Session, tavily: TavilyClient | None = None) -> None:
+    def __init__(self, db: Session, tavily: TavilyClient | None = None, repository: UpdateRepository | None = None) -> None:
         self.db = db
         self.tavily = tavily or TavilyClient()
+        self.repository = repository or UpdateRepository(db)
 
-    def refresh(self, technology_slugs: list[str] | None = None, reason: str = "manual") -> list[IngestionRun]:
-        """Refresh all active technologies or only the requested technology slugs."""
-        query = self.db.query(Technology).filter(Technology.active.is_(True))
-        if technology_slugs:
-            query = query.filter(Technology.slug.in_(technology_slugs))
-        runs = []
-        for technology in query.all():
+    def refresh(self, technology_slugs: list[str] | None = None, reason: str = "scheduled") -> list[IngestionRun]:
+        """Refresh all active technologies or only requested technology slugs."""
+        runs: list[IngestionRun] = []
+        technologies = self.repository.get_active_technologies(technology_slugs)
+        for technology in technologies:
             runs.append(self._refresh_technology(technology, reason))
-            self.db.commit()
         return runs
 
     def _refresh_technology(self, technology: Technology, reason: str) -> IngestionRun:
-        """Run Tavily Search/Extract/Crawl for one technology and record the result."""
-        run = IngestionRun(technology=technology, tavily_endpoint="search/extract/crawl", status="running")
-        self.db.add(run)
-        self.db.flush()
+        """Refresh one technology without stopping later technologies on failure."""
+        run = self.repository.create_ingestion_run(technology)
+        self.db.commit()
+
         if not self.tavily.configured:
-            run.status = "skipped"
-            run.completed_at = datetime.now(timezone.utc)
-            run.error_message = "TAVILY_API_KEY is not configured; external updates were not fetched."
-            return run
+            return self._skip_missing_api_key(run, reason)
 
         try:
-            candidate_urls: list[str] = []
-            for template in technology.query_templates:
-                # Search finds candidate update URLs from trusted/official domains.
-                search = self.tavily.search_updates(template, domains=technology.trusted_domains or technology.official_domains)
-                results = search.get("results", [])
-                run.results_found += len(results)
-                for result in results:
-                    url = result.get("url")
-                    if url and self._trusted(url, technology):
-                        candidate_urls.append(canonicalize_url(url))
-
-            if len(set(candidate_urls)) < 3 and technology.official_domains:
-                try:
-                    # Crawl is best-effort because some Tavily plans can use Search/Extract
-                    # but return 401 for Crawl. Search/Extract results still continue.
-                    candidate_urls.extend(self._discover_official_update_pages(technology))
-                except Exception as exc:
-                    run.error_message = f"Crawl discovery skipped: {exc}"
-
-            new_urls = []
-            for url in dict.fromkeys(candidate_urls):
-                # URL dedupe prevents extracting and saving the same page repeatedly.
-                if self.db.query(DeveloperUpdate).filter(DeveloperUpdate.canonical_url == url).first():
-                    run.duplicates_skipped += 1
-                else:
-                    new_urls.append(url)
-
-            for result in self.tavily.extract_updates(new_urls[:8]).get("results", []) if new_urls else []:
-                if self._save_extracted_update(technology, result):
-                    run.results_saved += 1
-                else:
-                    run.duplicates_skipped += 1
-            run.status = "completed"
+            urls, found, note = self._discover_urls(technology)
+            new_urls, duplicate_count = self.repository.remove_existing_urls(urls)
+            saved_count, fingerprint_duplicates = self._extract_new_urls(technology, new_urls)
+            run = self.repository.complete_ingestion_run(
+                run,
+                reason=reason,
+                results_found=found,
+                results_saved=saved_count,
+                duplicates_skipped=duplicate_count + fingerprint_duplicates,
+                note=note,
+            )
+            self.db.commit()
+            return run
         except Exception as exc:
-            run.status = "failed"
-            run.error_message = str(exc)
-        finally:
-            run.completed_at = datetime.now(timezone.utc)
-            run.error_message = f"{reason}: {run.error_message}" if run.error_message else reason
-        return run
+            logger.exception("Tavily ingestion failed for technology %s", technology.slug)
+            self.db.rollback()
+            run = self.db.merge(run)
+            run = self.repository.fail_ingestion_run(run, reason, str(exc))
+            self.db.commit()
+            return run
 
-    def _discover_official_update_pages(self, technology: Technology) -> list[str]:
+    def _discover_urls(self, technology: Technology) -> tuple[list[str], int, str | None]:
+        """Discover trusted update URLs using Tavily Search and optional Crawl."""
+        urls: list[str] = []
+        results_found = 0
+        for template in technology.query_templates:
+            search = self.tavily.search_updates(template, domains=self._search_domains(technology))
+            results = search.get("results", [])
+            results_found += len(results)
+            urls.extend(self._trusted_result_urls(results, technology))
+
+        note = None
+        if len(set(urls)) < 3 and technology.official_domains:
+            try:
+                urls.extend(self._crawl_official_update_pages(technology))
+            except Exception as exc:
+                logger.exception("Tavily crawl discovery failed for technology %s", technology.slug)
+                note = f"Crawl discovery skipped: {exc}"
+
+        return list(dict.fromkeys(urls)), results_found, note
+
+    def _extract_new_urls(self, technology: Technology, urls: list[str]) -> tuple[int, int]:
+        """Extract and process up to eight new URLs for a technology."""
+        if not urls:
+            return 0, 0
+        results = self.tavily.extract_updates(urls[:8]).get("results", [])
+        return self._process_results(technology, results)
+
+    def _process_results(self, technology: Technology, results: list[dict]) -> tuple[int, int]:
+        """Save useful extracted updates and count duplicates."""
+        saved = 0
+        duplicates = 0
+        for result in results:
+            processed_update = processor.process(result)
+            if not processed_update or self.repository.fingerprint_exists(processed_update.content_fingerprint):
+                duplicates += 1
+                continue
+            self.repository.save_update(technology, processed_update)
+            saved += 1
+        return saved, duplicates
+
+    def _crawl_official_update_pages(self, technology: Technology) -> list[str]:
+        """Discover official update pages with Tavily Crawl."""
         urls: list[str] = []
         for domain in technology.official_domains[:2]:
             crawl = self.tavily.crawl_official_source(f"https://{domain}", allowed_domains=[domain], max_depth=2, max_pages=10)
-            for result in crawl.get("results", []):
-                url = result.get("url")
-                if url and self._looks_like_update_page(url) and self._trusted(url, technology):
-                    urls.append(canonicalize_url(url))
+            urls.extend(self._trusted_result_urls(crawl.get("results", []), technology, update_pages_only=True))
         return urls
 
-    def _looks_like_update_page(self, url: str) -> bool:
-        lower = url.lower()
-        markers = ("release", "changelog", "security", "migration", "announce", "blog", "docs")
-        return any(marker in lower for marker in markers)
+    def _trusted_result_urls(self, results: list[dict], technology: Technology, update_pages_only: bool = False) -> list[str]:
+        """Normalize Tavily result URLs and keep trusted domains only."""
+        urls: list[str] = []
+        for result in results:
+            url = result.get("url")
+            if not url:
+                continue
+            normalized = canonicalize_url(url)
+            if self._trusted(normalized, technology) and (not update_pages_only or processor.looks_like_update_page(normalized)):
+                urls.append(normalized)
+        return urls
 
     def _trusted(self, url: str, technology: Technology) -> bool:
+        """Return true when a URL belongs to trusted or official domains."""
         domain = urlparse(url).netloc.lower().removeprefix("www.")
         trusted = set(technology.trusted_domains + technology.official_domains)
         return any(domain == allowed or domain.endswith(f".{allowed}") for allowed in trusted)
 
-    def _save_extracted_update(self, technology: Technology, result: dict) -> bool:
-        """Save one Tavily Extract result if it looks like a useful developer update."""
-        url = canonicalize_url(result.get("url", ""))
-        content = self._clean_extracted_content(result.get("raw_content") or result.get("content") or "")
-        title = result.get("title") or url
-        if not self._is_useful_update(title, content):
-            return False
-        fingerprint = content_fingerprint(title, content)
-        if self.db.query(DeveloperUpdate).filter(DeveloperUpdate.content_fingerprint == fingerprint).first():
-            return False
+    def _search_domains(self, technology: Technology) -> list[str]:
+        """Combine trusted and official Tavily search domains."""
+        return list(dict.fromkeys(technology.trusted_domains + technology.official_domains))
 
-        domain = urlparse(url).netloc.lower().removeprefix("www.")
-        source = self.db.query(Source).filter(Source.domain == domain).first()
-        if not source:
-            source = Source(name=domain, domain=domain, source_type="trusted", official=domain in technology.official_domains)
-            self.db.add(source)
-            self.db.flush()
-
-        lower = f"{title} {url} {content}".lower()
-        # Classification is deterministic and source-grounded. Unknown values stay broad.
-        category = "Releases"
-        if any(marker in lower for marker in ("security advisory", "security bulletin", "cve-", "vulnerability", "critical vulnerability")):
-            category = "Security"
-        elif "breaking" in lower or "migration" in lower:
-            category = "Breaking"
-        elif "deprecated" in lower or "deprecation" in lower:
-            category = "Deprecations"
-        elif "documentation" in lower or "docs" in lower:
-            category = "Documentation"
-        elif "ai" in lower or "agent" in lower:
-            category = "AI Tools"
-
-        impact = "Critical" if category == "Security" else "Important" if category in {"Breaking", "Deprecations"} else "Informational"
-        summary = self._summary_from_content(content)
-        self.db.add(
-            DeveloperUpdate(
-                title=title[:300],
-                canonical_url=url,
-                source=source,
-                original_excerpt=result.get("content"),
-                extracted_content=content,
-                summary=summary,
-                why_it_matters="Not specified.",
-                recommended_action=None,
-                version=None,
-                category=category,
-                impact_level=impact,
-                published_at=None,
-                content_fingerprint=fingerprint,
-                raw_metadata={"tavily": result},
-                technologies=[technology],
-            )
+    def _skip_missing_api_key(self, run: IngestionRun, reason: str) -> IngestionRun:
+        """Record a skipped run when Tavily is not configured."""
+        run = self.repository.complete_ingestion_run(
+            run,
+            reason=reason,
+            results_found=0,
+            results_saved=0,
+            duplicates_skipped=0,
+            note="TAVILY_API_KEY is not configured; external updates were not fetched.",
+            status="skipped",
         )
-        return True
-
-    def _clean_extracted_content(self, content: str) -> str:
-        heading = re.search(r"(#\s+[A-Z0-9][^\n]+)", content)
-        if heading:
-            content = content[heading.start() :]
-        cleaned = re.sub(r"!\[[^\]]*]\([^)]*\)", " ", content)
-        cleaned = re.sub(r"\[[^\]]*]\(javascript:[^)]*\)", " ", cleaned, flags=re.IGNORECASE)
-        cleaned = re.sub(r"\[[^\]]*]\([^)]*\)", " ", cleaned)
-        cleaned = re.sub(r"\*\*Notice:\*\*.*?(?=#|\n[A-Z]|\Z)", " ", cleaned, flags=re.IGNORECASE | re.DOTALL)
-        cleaned = re.sub(r"\*{2,}", " ", cleaned)
-        cleaned = re.sub(r"javascript:[^ ]+", " ", cleaned, flags=re.IGNORECASE)
-        cleaned = re.sub(r"Solutions & technology Security Ecosystem Industries", " ", cleaned)
-        cleaned = re.sub(r"Try Gemini Enterprise today", " ", cleaned, flags=re.IGNORECASE)
-        cleaned = re.sub(r"\s+", " ", cleaned)
-        return cleaned.strip()
-
-    def _is_useful_update(self, title: str, content: str) -> bool:
-        lower = f"{title} {content}".lower()
-        noisy_markers = (
-            "this page displays a fallback because interactive scripts did not run",
-            "make text smaller",
-            "reset any font size",
-        )
-        if any(marker in lower for marker in noisy_markers):
-            return False
-        update_markers = (
-            "release",
-            "changelog",
-            "security",
-            "cve",
-            "deprecated",
-            "deprecation",
-            "breaking",
-            "migration",
-            "upgrade",
-            "announcement",
-            "sdk",
-            "version",
-        )
-        return len(content) >= 120 and any(marker in lower for marker in update_markers)
-
-    def _summary_from_content(self, content: str) -> str:
-        sentences = re.split(r"(?<=[.!?])\s+", content)
-        summary = " ".join(sentence for sentence in sentences[:3] if sentence)
-        return summary[:420] or "Not specified."
+        self.db.commit()
+        return run

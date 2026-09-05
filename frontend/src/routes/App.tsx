@@ -28,6 +28,7 @@ const nav = [
   ["AI Search", Bot],
   ["Bookmarks", Bookmark],
 ] as const;
+type NavItem = (typeof nav)[number][0];
 
 function impactClass(level: string) {
   if (level === "Critical") return "border-red-200 bg-red-50 text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-200";
@@ -139,6 +140,8 @@ export default function App() {
   const [bookmarks, setBookmarks] = useLocalStorage<number[]>("devpulse-bookmarks", []);
   const [category, setCategory] = useState("All");
   const [query, setQuery] = useState("");
+  const [activeView, setActiveView] = useState<NavItem>("My Feed");
+  const searchInputRef = useRef<HTMLInputElement>(null);
 
   if (dark) document.documentElement.classList.add("dark");
   else document.documentElement.classList.remove("dark");
@@ -172,12 +175,23 @@ export default function App() {
     [selected, technologies.data]
   );
 
-  const visibleItems = feed.data?.items ?? [];
+  const feedItems = feed.data?.items ?? [];
+  const visibleItems = activeView === "Bookmarks" ? feedItems.filter((update) => bookmarks.includes(update.id)) : feedItems;
   const toggleTech = (slug: string) => {
     setSelected((current) => (current.includes(slug) ? current.filter((item) => item !== slug) : [...current, slug]));
   };
   const toggleBookmark = (id: number) => {
     setBookmarks((current) => (current.includes(id) ? current.filter((item) => item !== id) : [...current, id]));
+  };
+  const selectView = (label: NavItem) => {
+    setActiveView(label);
+    if (label === "Explore") {
+      setCategory("All");
+      setQuery("");
+    }
+    if (label === "AI Search") {
+      requestAnimationFrame(() => searchInputRef.current?.focus());
+    }
   };
   const refreshRunning = Boolean(feed.data?.refresh_running || refreshStatus.data?.running || latestRequest.isPending);
   const cooldownUntil = refreshStatus.data?.cooldown_until ?? feed.data?.cooldown_until;
@@ -210,7 +224,13 @@ export default function App() {
           <Card className="p-3">
             <nav className="grid gap-1">
               {nav.map(([label, Icon]) => (
-                <button key={label} className="flex h-10 items-center gap-3 rounded-md px-3 text-left text-sm font-medium hover:bg-muted">
+                <button
+                  key={label}
+                  className={`flex h-10 items-center gap-3 rounded-md px-3 text-left text-sm font-medium ${
+                    activeView === label ? "bg-primary text-white" : "hover:bg-muted"
+                  }`}
+                  onClick={() => selectView(label)}
+                >
                   <Icon size={17} />
                   {label}
                 </button>
@@ -246,8 +266,12 @@ export default function App() {
           <section>
             <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
               <div>
-                <h1 className="text-3xl font-bold tracking-normal">{greeting()}</h1>
-                <p className="mt-1 text-slate-600 dark:text-slate-300">Here’s what changed across your stack.</p>
+                <h1 className="text-3xl font-bold tracking-normal">
+                  {activeView === "Bookmarks" ? "Bookmarked updates" : activeView === "Explore" ? "Explore updates" : greeting()}
+                </h1>
+                <p className="mt-1 text-slate-600 dark:text-slate-300">
+                  {activeView === "Bookmarks" ? "Updates you saved for later." : "Here’s what changed across your stack."}
+                </p>
               </div>
               <Button
                 variant="outline"
@@ -270,7 +294,16 @@ export default function App() {
 
           <div className="relative">
             <Search className="pointer-events-none absolute left-4 top-3.5 text-slate-400" size={20} />
-            <Input className="pl-12" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Ask what changed in your stack..." />
+            <Input
+              ref={searchInputRef}
+              className="pl-12"
+              value={query}
+              onChange={(event) => {
+                setQuery(event.target.value);
+                if (event.target.value.trim()) setActiveView("AI Search");
+              }}
+              placeholder="Ask what changed in your stack..."
+            />
           </div>
 
           <div className="flex gap-2 overflow-auto pb-1">
@@ -299,8 +332,10 @@ export default function App() {
 
           {!feed.isLoading && !feed.isError && visibleItems.length === 0 && (
             <Card className="p-8 text-center">
-              <h2 className="font-semibold">No matching updates</h2>
-              <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">Adjust your stack, search, or filters to widen the feed.</p>
+              <h2 className="font-semibold">{activeView === "Bookmarks" ? "No bookmarks yet" : "No matching updates"}</h2>
+              <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
+                {activeView === "Bookmarks" ? "Bookmark updates from your feed to see them here." : "Adjust your stack, search, or filters to widen the feed."}
+              </p>
             </Card>
           )}
 
