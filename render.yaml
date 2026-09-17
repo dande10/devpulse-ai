@@ -17,7 +17,7 @@ services:
           name: devpulse-db
           property: connectionString
       - key: CORS_ORIGINS
-        value: https://devpulse-frontend.onrender.com
+        value: https://devpulse-frontend-9znz.onrender.com
       - key: TAVILY_API_KEY
         sync: false
       - key: TAVILY_MAX_RESULTS
