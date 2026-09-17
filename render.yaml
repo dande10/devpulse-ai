@@ -44,7 +44,7 @@ services:
     staticPublishPath: ./frontend/dist
     envVars:
       - key: VITE_API_BASE_URL
-        value: https://devpulse-backend.onrender.com
+        value: https://devpulse-backend-bslg.onrender.com
     routes:
       - type: rewrite
         source: /*
