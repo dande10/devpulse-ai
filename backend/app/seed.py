@@ -8,6 +8,7 @@ TECHNOLOGIES = [
     ("Expo", "expo", "Expo", ["expo", "expo sdk"], ["expo.dev"], ["expo.dev"]),
     ("TypeScript", "typescript", "TS", ["typescript", "tsc"], ["typescriptlang.org"], ["typescriptlang.org"]),
     ("JavaScript", "javascript", "JS", ["javascript", "ecmascript"], ["tc39.es"], ["tc39.es"]),
+    ("Java", "java", "Java", ["java", "jdk", "openjdk"], ["openjdk.org", "oracle.com"], ["openjdk.org"]),
     ("Python", "python", "Py", ["python", "cpython"], ["python.org"], ["python.org"]),
     ("FastAPI", "fastapi", "API", ["fastapi"], ["fastapi.tiangolo.com"], ["fastapi.tiangolo.com"]),
     ("Node.js", "nodejs", "Node", ["node.js", "node"], ["nodejs.org"], ["nodejs.org"]),
@@ -44,36 +45,36 @@ TECHNOLOGIES = [
     ("Docker", "docker", "Doc", ["docker"], ["docs.docker.com"], ["docs.docker.com"]),
     ("Kubernetes", "kubernetes", "K8s", ["kubernetes"], ["kubernetes.io"], ["kubernetes.io"]),
     (
-        "H-1B Visa",
-        "h1b",
-        "H1B",
-        ["h-1b", "h1b", "h-1b visa", "specialty occupation"],
-        ["uscis.gov", "travel.state.gov", "federalregister.gov"],
-        ["uscis.gov", "travel.state.gov"],
-    ),
-    (
-        "H-4 EAD",
-        "h4-ead",
-        "H4",
-        ["h-4 ead", "h4 ead", "h-4 employment authorization", "form i-765"],
-        ["uscis.gov", "federalregister.gov"],
-        ["uscis.gov"],
-    ),
-    (
-        "EB-1 Green Card",
-        "eb1",
-        "EB1",
-        ["eb-1", "eb1", "employment-based first preference", "extraordinary ability"],
-        ["uscis.gov", "travel.state.gov"],
-        ["uscis.gov", "travel.state.gov"],
-    ),
-    (
         "Visa Bulletin",
         "visa-bulletin",
         "Visa",
         ["visa bulletin", "priority date", "final action dates", "dates for filing"],
         ["travel.state.gov", "uscis.gov"],
         ["travel.state.gov", "uscis.gov"],
+    ),
+    (
+        "OpenAI / ChatGPT",
+        "openai",
+        "GPT",
+        ["openai", "chatgpt", "gpt-4", "gpt-5", "gpt"],
+        ["openai.com", "help.openai.com", "platform.openai.com"],
+        ["openai.com", "platform.openai.com"],
+    ),
+    (
+        "Anthropic / Claude",
+        "anthropic",
+        "Claude",
+        ["anthropic", "claude", "claude code", "claude opus", "claude sonnet"],
+        ["anthropic.com", "docs.claude.com", "claude.com"],
+        ["anthropic.com", "docs.claude.com"],
+    ),
+    (
+        "Google Gemini",
+        "gemini",
+        "Gem",
+        ["gemini", "google gemini", "gemini api", "google ai"],
+        ["ai.google.dev", "blog.google", "deepmind.google"],
+        ["ai.google.dev", "deepmind.google"],
     ),
 ]
 
@@ -122,34 +123,46 @@ def seed_database(db: Session) -> None:
                 "Vue.js security advisories latest",
                 "Vue.js official blog developer updates",
             ]
-        if slug == "h1b":
-            query_templates = [
-                "USCIS latest H-1B visa updates",
-                "USCIS H-1B cap registration latest update",
-                "USCIS H-1B specialty occupation rule update",
-                "Federal Register H-1B visa latest rule",
-                "Department of State H-1B visa update",
-            ]
-        if slug == "h4-ead":
-            query_templates = [
-                "USCIS latest H-4 EAD updates",
-                "USCIS H-4 employment authorization latest update",
-                "USCIS Form I-765 H-4 EAD latest",
-                "Federal Register H-4 EAD latest rule",
-            ]
-        if slug == "eb1":
-            query_templates = [
-                "USCIS latest EB-1 updates",
-                "USCIS EB-1 extraordinary ability latest update",
-                "Department of State EB-1 priority date update",
-                "USCIS employment based first preference update",
-            ]
         if slug == "visa-bulletin":
             query_templates = [
                 "Department of State latest visa bulletin",
                 "USCIS latest visa bulletin adjustment of status filing chart",
                 "Visa bulletin final action dates latest",
                 "Visa bulletin dates for filing latest",
+            ]
+        if slug == "openai":
+            query_templates = [
+                "OpenAI ChatGPT release notes latest",
+                "OpenAI API changelog latest update",
+                "OpenAI new model release GPT",
+                "OpenAI platform breaking changes migration",
+            ]
+        if slug == "anthropic":
+            query_templates = [
+                "Anthropic Claude release notes latest",
+                "Claude API changelog latest update",
+                "Anthropic new Claude model release",
+                "Claude Code changelog latest",
+            ]
+        if slug == "gemini":
+            query_templates = [
+                "Gemini API changelog latest update",
+                "Google Gemini new model release",
+                "Gemini API breaking changes migration",
+                "Google AI Gemini developer blog update",
+            ]
+        if slug == "pmp-certification":
+            query_templates = [
+                "PMI PMP certification exam changes latest",
+                "Project Management Professional certification update",
+                "PMI CAPM certification update latest",
+                "PMI exam content outline changes latest",
+            ]
+        if slug == "gcp-certification":
+            query_templates = [
+                "Google Cloud certification exam updates latest",
+                "Google Cloud certified professional exam changes",
+                "Google Cloud certification new exam guide latest",
             ]
         if slug in existing_by_slug:
             technology = existing_by_slug[slug]

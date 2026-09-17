@@ -65,7 +65,7 @@ class UpdateRepository:
             version=update.version,
             category=update.category,
             impact_level=update.impact_level,
-            published_at=None,
+            published_at=update.published_at,
             content_fingerprint=update.content_fingerprint,
             raw_metadata=update.raw_metadata,
             technologies=[technology],

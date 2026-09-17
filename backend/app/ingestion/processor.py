@@ -1,5 +1,7 @@
 import re
 from dataclasses import dataclass
+from datetime import datetime, timezone
+from email.utils import parsedate_to_datetime
 
 from app.services.normalize import canonicalize_url, content_fingerprint
 
@@ -67,8 +69,22 @@ class ProcessedUpdate:
     version: str | None
     category: str
     impact_level: str
+    published_at: datetime | None
     content_fingerprint: str
     raw_metadata: dict
+
+
+def parse_published_date(value: str | None) -> datetime | None:
+    """Parse Tavily's RFC-2822-style published_date (only present for topic="news" search results, never on extract)."""
+    if not value:
+        return None
+    try:
+        parsed = parsedate_to_datetime(value)
+    except (TypeError, ValueError):
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed
 
 
 def clean_content(content: str) -> str:
@@ -79,11 +95,16 @@ def clean_content(content: str) -> str:
     cleaned = re.sub(r"!\[[^\]]*]\([^)]*\)", " ", content)
     cleaned = re.sub(r"\[[^\]]*]\(javascript:[^)]*\)", " ", cleaned, flags=re.IGNORECASE)
     cleaned = re.sub(r"\[[^\]]*]\([^)]*\)", " ", cleaned)
+    # Orphaned "](url)" fragments — the matching "[" got cut off by the
+    # heading-anchor above, landing mid-link.
+    cleaned = re.sub(r"]\([^)]*\)", " ", cleaned)
     cleaned = re.sub(r"\*\*Notice:\*\*.*?(?=#|\n[A-Z]|\Z)", " ", cleaned, flags=re.IGNORECASE | re.DOTALL)
     cleaned = re.sub(r"\*{2,}", " ", cleaned)
     cleaned = re.sub(r"javascript:[^ ]+", " ", cleaned, flags=re.IGNORECASE)
     cleaned = re.sub(r"Solutions & technology Security Ecosystem Industries", " ", cleaned)
     cleaned = re.sub(r"Try Gemini Enterprise today", " ", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r"^#+\s*", "", cleaned)
+    cleaned = re.sub(r"(?m)^\s*-{3,}\s*$", " ", cleaned)
     cleaned = re.sub(r"\s+", " ", cleaned)
     return cleaned.strip()
 
@@ -134,8 +155,12 @@ def looks_like_update_page(url: str) -> bool:
     return any(marker in lower for marker in UPDATE_PAGE_MARKERS)
 
 
-def process(result: dict) -> ProcessedUpdate | None:
-    """Convert one Tavily Extract result into a saveable update."""
+def process(result: dict, published_at: datetime | None = None) -> ProcessedUpdate | None:
+    """Convert one Tavily Extract result into a saveable update.
+
+    published_at comes from the earlier Tavily Search phase (topic="news"),
+    matched back in by canonical URL — Extract itself never returns a date.
+    """
     url = canonicalize_url(result.get("url", ""))
     content = clean_content(result.get("raw_content") or result.get("content") or "")
     title = result.get("title") or url
@@ -154,6 +179,7 @@ def process(result: dict) -> ProcessedUpdate | None:
         version=None,
         category=category,
         impact_level=classify_impact(category),
+        published_at=published_at,
         content_fingerprint=content_fingerprint(title, content),
         raw_metadata={"tavily": result},
     )

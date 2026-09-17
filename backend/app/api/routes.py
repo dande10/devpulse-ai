@@ -8,12 +8,21 @@ from app.core.config import settings
 from app.database.session import get_db
 from app.ingestion.pipeline import IngestionPipeline
 from app.ingestion.refresh_coordinator import refresh_coordinator
-from app.models import DeveloperUpdate, IngestionRun, Technology
+from app.models import DeveloperUpdate, Feedback, IngestionRun, Technology, TechnologyRequest
+from app.schemas.feedback import FeedbackCreate, FeedbackPublicRead, FeedbackRead
 from app.schemas.technology import TechnologyRead
+from app.schemas.technology_request import TechnologyRequestCreate, TechnologyRequestRead
 from app.schemas.update import DeveloperUpdateRead, FeedResponse
 from app.seed import seed_database
+from app.services.notifications import send_notification_email
 
 router = APIRouter(prefix="/api")
+
+# Default recency window for the feed/search: ~6 months back, no upper bound
+# (future-dated announcements still show). Updates with no known publish date
+# (older content ingested before Tavily topic="news" search was wired in)
+# still show too, rather than disappearing outright.
+DEFAULT_RECENCY_DAYS = 183
 
 
 @router.get("/health")
@@ -28,6 +37,124 @@ def technologies(db: Session = Depends(get_db)) -> list[Technology]:
     """Return configurable technology stack options for the React UI."""
     seed_database(db)
     return db.query(Technology).filter(Technology.active.is_(True)).order_by(Technology.name).all()
+
+
+@router.post("/technology-requests", response_model=TechnologyRequestRead)
+def create_technology_request(payload: TechnologyRequestCreate, db: Session = Depends(get_db)) -> TechnologyRequest:
+    """Let any visitor ask us to start tracking a technology.
+
+    Does not create a Technology row — an admin reviews the queue and, if it
+    makes sense, hand-configures trusted/official domains in seed.py the same
+    way every other tracked technology is. Re-requesting the same name just
+    bumps its count instead of creating a duplicate row.
+    """
+    normalized = payload.name.strip().lower()
+    existing = db.query(TechnologyRequest).filter(TechnologyRequest.normalized_name == normalized).first()
+    if existing:
+        existing.request_count += 1
+        if payload.note and not existing.note:
+            existing.note = payload.note
+        db.commit()
+        db.refresh(existing)
+        send_notification_email(
+            f"DevPulse: technology request bumped — {existing.name}",
+            f"{existing.name} was requested again (now {existing.request_count} times).\n\nNote: {payload.note or '(none)'}",
+        )
+        return existing
+
+    request = TechnologyRequest(name=payload.name.strip(), normalized_name=normalized, note=payload.note)
+    db.add(request)
+    db.commit()
+    db.refresh(request)
+    send_notification_email(
+        f"DevPulse: new technology request — {request.name}",
+        f"{request.name}\n\nNote: {payload.note or '(none)'}",
+    )
+    return request
+
+
+@router.post("/feedback", response_model=FeedbackRead)
+def create_feedback(payload: FeedbackCreate, db: Session = Depends(get_db)) -> Feedback:
+    """Accept a review from the public site.
+
+    Saved as "pending" — no email yet. The admin reviews the queue via
+    GET /api/admin/feedback and only reviews approved through
+    POST /api/admin/feedback/{id}/status get emailed.
+    """
+    feedback = Feedback(name=payload.name, email=payload.email, rating=payload.rating, message=payload.message.strip())
+    db.add(feedback)
+    db.commit()
+    db.refresh(feedback)
+    return feedback
+
+
+@router.get("/admin/feedback", response_model=list[FeedbackRead])
+def admin_list_feedback(db: Session = Depends(get_db)) -> list[Feedback]:
+    """Full review queue (every status) for local admin moderation."""
+    return db.query(Feedback).order_by(Feedback.created_at.desc()).all()
+
+
+@router.get("/reviews", response_model=list[FeedbackPublicRead])
+def public_reviews(db: Session = Depends(get_db)) -> list[Feedback]:
+    """Approved reviews shown on the public site — no email addresses."""
+    return (
+        db.query(Feedback)
+        .filter(Feedback.status == "approved")
+        .order_by(Feedback.created_at.desc())
+        .limit(24)
+        .all()
+    )
+
+
+@router.post("/admin/feedback/{feedback_id}/status", response_model=FeedbackRead)
+def admin_update_feedback_status(feedback_id: int, status: str = Body(embed=True), db: Session = Depends(get_db)) -> Feedback:
+    """Approve/reject a review. Approving emails the full review to the admin inbox."""
+    if status not in {"pending", "approved", "rejected"}:
+        raise HTTPException(status_code=400, detail="status must be pending, approved, or rejected")
+    feedback = db.query(Feedback).filter(Feedback.id == feedback_id).first()
+    if not feedback:
+        raise HTTPException(status_code=404, detail="Feedback not found")
+    newly_approved = status == "approved" and feedback.status != "approved"
+    feedback.status = status
+    db.commit()
+    db.refresh(feedback)
+    if newly_approved:
+        send_notification_email(
+            "DevPulse: approved review" + (f" ({feedback.rating}/5)" if feedback.rating else ""),
+            f"From: {feedback.name or 'Anonymous'} <{feedback.email or 'no email given'}>\n\n{feedback.message}",
+        )
+    return feedback
+
+
+@router.get("/technology-requests", response_model=list[TechnologyRequestRead])
+def list_technology_requests(db: Session = Depends(get_db)) -> list[TechnologyRequest]:
+    """Public, transparent view of what developers are asking for — pending only."""
+    return (
+        db.query(TechnologyRequest)
+        .filter(TechnologyRequest.status == "pending")
+        .order_by(TechnologyRequest.request_count.desc(), TechnologyRequest.created_at.desc())
+        .all()
+    )
+
+
+@router.get("/admin/technology-requests", response_model=list[TechnologyRequestRead])
+def admin_list_technology_requests(db: Session = Depends(get_db)) -> list[TechnologyRequest]:
+    """Full queue (every status) for the admin reviewing requests locally."""
+    return db.query(TechnologyRequest).order_by(TechnologyRequest.request_count.desc(), TechnologyRequest.created_at.desc()).all()
+
+
+@router.post("/admin/technology-requests/{request_id}/status", response_model=TechnologyRequestRead)
+def admin_update_technology_request_status(request_id: int, status: str = Body(embed=True), db: Session = Depends(get_db)) -> TechnologyRequest:
+    """Mark a request approved/rejected/pending. Adding the actual Technology is a separate, manual seed.py change."""
+    if status not in {"pending", "approved", "rejected"}:
+        raise HTTPException(status_code=400, detail="status must be pending, approved, or rejected")
+    request = db.query(TechnologyRequest).filter(TechnologyRequest.id == request_id).first()
+    if not request:
+        raise HTTPException(status_code=404, detail="Technology request not found")
+    request.status = status
+    db.commit()
+    db.refresh(request)
+    return request
 
 
 def updates_query(db: Session):
@@ -54,7 +181,7 @@ def apply_filters(query, technology_slugs, category, impact_level, date_from, da
     if impact_level:
         query = query.filter(DeveloperUpdate.impact_level == impact_level)
     if date_from:
-        query = query.filter(DeveloperUpdate.published_at >= date_from)
+        query = query.filter(or_(DeveloperUpdate.published_at >= date_from, DeveloperUpdate.published_at.is_(None)))
     if date_to:
         query = query.filter(DeveloperUpdate.published_at <= date_to)
     return query
@@ -79,7 +206,8 @@ def feed(
     """
     seed_database(db)
     refresh_status = refresh_coordinator.status()
-    base = apply_filters(updates_query(db), technology_slugs, category, impact_level, date_from, date_to)
+    effective_date_from = date_from or (datetime.now(timezone.utc) - timedelta(days=DEFAULT_RECENCY_DAYS))
+    base = apply_filters(updates_query(db), technology_slugs, category, impact_level, effective_date_from, date_to)
     total = base.count()
     order = DeveloperUpdate.published_at.asc() if sort == "oldest" else DeveloperUpdate.published_at.desc().nullslast()
     items = base.order_by(order).offset((page - 1) * page_size).limit(page_size).all()
@@ -145,6 +273,8 @@ def search(
         query = query.filter(DeveloperUpdate.category == category)
     if impact_level:
         query = query.filter(DeveloperUpdate.impact_level == impact_level)
+    recency_cutoff = datetime.now(timezone.utc) - timedelta(days=DEFAULT_RECENCY_DAYS)
+    query = query.filter(or_(DeveloperUpdate.published_at >= recency_cutoff, DeveloperUpdate.published_at.is_(None)))
     if "this month" in lowered:
         query = query.filter(DeveloperUpdate.published_at >= datetime.now(timezone.utc) - timedelta(days=31))
     if "security" in lowered:

@@ -11,6 +11,11 @@ from app.services.tavily.client import TavilyClient
 
 logger = logging.getLogger(__name__)
 
+# topic="news" is the only Tavily search mode that returns a published_date
+# per result — general-topic search and Extract never do. 200 days gives a
+# buffer beyond the ~6 month recency window the feed displays by default.
+SEARCH_RECENCY_DAYS = 200
+
 
 class IngestionPipeline:
     """Coordinate Tavily discovery, processing, and PostgreSQL saves."""
@@ -37,9 +42,9 @@ class IngestionPipeline:
             return self._skip_missing_api_key(run, reason)
 
         try:
-            urls, found, note = self._discover_urls(technology)
+            urls, found, note, url_dates = self._discover_urls(technology)
             new_urls, duplicate_count = self.repository.remove_existing_urls(urls)
-            saved_count, fingerprint_duplicates = self._extract_new_urls(technology, new_urls)
+            saved_count, fingerprint_duplicates = self._extract_new_urls(technology, new_urls, url_dates)
             run = self.repository.complete_ingestion_run(
                 run,
                 reason=reason,
@@ -58,39 +63,45 @@ class IngestionPipeline:
             self.db.commit()
             return run
 
-    def _discover_urls(self, technology: Technology) -> tuple[list[str], int, str | None]:
+    def _discover_urls(self, technology: Technology) -> tuple[list[str], int, str | None, dict[str, str | None]]:
         """Discover trusted update URLs using Tavily Search and optional Crawl."""
-        urls: list[str] = []
+        url_dates: dict[str, str | None] = {}
         results_found = 0
         for template in technology.query_templates:
-            search = self.tavily.search_updates(template, domains=self._search_domains(technology))
+            search = self.tavily.search_updates(
+                template, domains=self._search_domains(technology), topic="news", days=SEARCH_RECENCY_DAYS
+            )
             results = search.get("results", [])
             results_found += len(results)
-            urls.extend(self._trusted_result_urls(results, technology))
+            for url, published_date in self._trusted_result_urls(results, technology):
+                url_dates.setdefault(url, published_date)
 
         note = None
-        if len(set(urls)) < 3 and technology.official_domains:
+        if len(url_dates) < 3 and technology.official_domains:
             try:
-                urls.extend(self._crawl_official_update_pages(technology))
+                for url, published_date in self._crawl_official_update_pages(technology):
+                    url_dates.setdefault(url, published_date)
             except Exception as exc:
                 logger.exception("Tavily crawl discovery failed for technology %s", technology.slug)
                 note = f"Crawl discovery skipped: {exc}"
 
-        return list(dict.fromkeys(urls)), results_found, note
+        return list(url_dates.keys()), results_found, note, url_dates
 
-    def _extract_new_urls(self, technology: Technology, urls: list[str]) -> tuple[int, int]:
+    def _extract_new_urls(self, technology: Technology, urls: list[str], url_dates: dict[str, str | None]) -> tuple[int, int]:
         """Extract and process up to eight new URLs for a technology."""
         if not urls:
             return 0, 0
         results = self.tavily.extract_updates(urls[:8]).get("results", [])
-        return self._process_results(technology, results)
+        return self._process_results(technology, results, url_dates)
 
-    def _process_results(self, technology: Technology, results: list[dict]) -> tuple[int, int]:
+    def _process_results(self, technology: Technology, results: list[dict], url_dates: dict[str, str | None]) -> tuple[int, int]:
         """Save useful extracted updates and count duplicates."""
         saved = 0
         duplicates = 0
         for result in results:
-            processed_update = processor.process(result)
+            url = canonicalize_url(result.get("url", ""))
+            published_at = processor.parse_published_date(url_dates.get(url))
+            processed_update = processor.process(result, published_at=published_at)
             if not processed_update or self.repository.fingerprint_exists(processed_update.content_fingerprint):
                 duplicates += 1
                 continue
@@ -98,24 +109,26 @@ class IngestionPipeline:
             saved += 1
         return saved, duplicates
 
-    def _crawl_official_update_pages(self, technology: Technology) -> list[str]:
-        """Discover official update pages with Tavily Crawl."""
-        urls: list[str] = []
+    def _crawl_official_update_pages(self, technology: Technology) -> list[tuple[str, str | None]]:
+        """Discover official update pages with Tavily Crawl (never returns a date)."""
+        urls: list[tuple[str, str | None]] = []
         for domain in technology.official_domains[:2]:
             crawl = self.tavily.crawl_official_source(f"https://{domain}", allowed_domains=[domain], max_depth=2, max_pages=10)
             urls.extend(self._trusted_result_urls(crawl.get("results", []), technology, update_pages_only=True))
         return urls
 
-    def _trusted_result_urls(self, results: list[dict], technology: Technology, update_pages_only: bool = False) -> list[str]:
-        """Normalize Tavily result URLs and keep trusted domains only."""
-        urls: list[str] = []
+    def _trusted_result_urls(
+        self, results: list[dict], technology: Technology, update_pages_only: bool = False
+    ) -> list[tuple[str, str | None]]:
+        """Normalize Tavily result URLs and keep trusted domains only, carrying each result's published_date along."""
+        urls: list[tuple[str, str | None]] = []
         for result in results:
             url = result.get("url")
             if not url:
                 continue
             normalized = canonicalize_url(url)
             if self._trusted(normalized, technology) and (not update_pages_only or processor.looks_like_update_page(normalized)):
-                urls.append(normalized)
+                urls.append((normalized, result.get("published_date")))
         return urls
 
     def _trusted(self, url: str, technology: Technology) -> bool:

@@ -19,12 +19,16 @@ class TavilyClient:
     def _post(self, path: str, payload: dict[str, Any]) -> dict[str, Any]:
         if not self.api_key:
             raise RuntimeError("TAVILY_API_KEY is not configured")
+        # /search and /extract accept api_key in the body, but /crawl only
+        # accepts it as a Bearer token and 401s on the body-only form — send
+        # both so every endpoint authenticates the same way.
         body = {"api_key": self.api_key, **payload}
+        headers = {"Authorization": f"Bearer {self.api_key}"}
         last_error: Exception | None = None
         for attempt in range(settings.tavily_retries):
             try:
                 with httpx.Client(timeout=self.timeout) as client:
-                    response = client.post(f"{self.base_url}{path}", json=body)
+                    response = client.post(f"{self.base_url}{path}", json=body, headers=headers)
                     response.raise_for_status()
                     return response.json()
             except (httpx.HTTPError, httpx.TimeoutException) as exc:

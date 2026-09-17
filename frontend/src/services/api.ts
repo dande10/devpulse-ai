@@ -1,4 +1,4 @@
-import type { FeedResponse, RefreshStatus, Technology } from "../types";
+import type { FeedResponse, Review, Technology, TechnologyRequest } from "../types";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000";
 
@@ -24,9 +24,17 @@ export async function getTechnologies(): Promise<Technology[]> {
 
 export async function getFeed(params: { technologySlugs: string[]; category: string; query: string }): Promise<FeedResponse> {
   if (params.technologySlugs.length === 0) return emptyFeed;
+  return fetchUpdates({ technologySlugs: params.technologySlugs, category: params.category, query: params.query });
+}
 
+/** Every developer's view: every technology, not just the visitor's own stack. */
+export async function getAllUpdates(params: { category: string; query: string }): Promise<FeedResponse> {
+  return fetchUpdates({ category: params.category, query: params.query });
+}
+
+async function fetchUpdates(params: { technologySlugs?: string[]; category: string; query: string }): Promise<FeedResponse> {
   const search = new URLSearchParams();
-  params.technologySlugs.forEach((slug) => search.append("technology_slugs", slug));
+  params.technologySlugs?.forEach((slug) => search.append("technology_slugs", slug));
   if (params.category !== "All") search.set("category", params.category);
 
   const trimmedQuery = params.query.trim();
@@ -38,18 +46,38 @@ export async function getFeed(params: { technologySlugs: string[]; category: str
   return response.json();
 }
 
-export async function requestLatestUpdates(technologySlugs: string[]): Promise<RefreshStatus & { started: boolean; message: string }> {
-  const response = await fetch(`${API_BASE_URL}/api/refresh`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(technologySlugs),
-  });
-  if (!response.ok) throw new Error("Unable to request latest updates");
+// Triggering a Tavily refresh from the public site is intentionally not
+// exposed here — that stays an admin action run locally (POST
+// /api/admin/refresh), so a public visitor can browse and search but never
+// spend ingestion API credits themselves.
+
+export async function getTechnologyRequests(): Promise<TechnologyRequest[]> {
+  const response = await fetch(`${API_BASE_URL}/api/technology-requests`);
+  if (!response.ok) throw new Error("Unable to load technology requests");
   return response.json();
 }
 
-export async function getRefreshStatus(): Promise<RefreshStatus> {
-  const response = await fetch(`${API_BASE_URL}/api/refresh/status`);
-  if (!response.ok) throw new Error("Unable to load refresh status");
+export async function requestTechnology(name: string, note?: string): Promise<TechnologyRequest> {
+  const response = await fetch(`${API_BASE_URL}/api/technology-requests`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name, note }),
+  });
+  if (!response.ok) throw new Error("Unable to submit that request");
+  return response.json();
+}
+
+export async function submitFeedback(payload: { name?: string; email?: string; rating?: number; message: string }): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/api/feedback`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) throw new Error("Unable to submit feedback");
+}
+
+export async function getReviews(): Promise<Review[]> {
+  const response = await fetch(`${API_BASE_URL}/api/reviews`);
+  if (!response.ok) throw new Error("Unable to load reviews");
   return response.json();
 }

@@ -1,0 +1,263 @@
+/* Shared site chrome — header, footer, buttons, and the request/feedback
+   modals. Loaded globally so every route (Landing at "/" and the dashboard
+   at "/feed") renders the exact same header, footer, and controls instead of
+   each route styling its own. Landing-only section/hero/panel styling stays
+   in landing.css, scoped under .page. */
+
+.container {
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  padding-inline: clamp(20px, 4vw, 88px);
+}
+
+header {
+  border-bottom: 1px solid #26344a88;
+  background: #080f1cc9;
+}
+.nav {
+  min-height: 84px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+}
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 20px;
+  font-weight: 700;
+  white-space: nowrap;
+  color: inherit;
+  text-decoration: none;
+}
+.logo {
+  display: grid;
+  place-items: center;
+  background: linear-gradient(135deg, #36bcff, #194bfb 60%, #9667ff);
+  width: 38px;
+  height: 38px;
+  border-radius: 9px;
+  font-size: 15px;
+  color: white;
+}
+.navlinks,
+.navright {
+  display: flex;
+  align-items: center;
+  gap: 28px;
+}
+.navlinks a {
+  color: inherit;
+  text-decoration: none;
+}
+.badge {
+  border: 1px solid #164453;
+  background: #07243466;
+  border-radius: 30px;
+  padding: 8px 14px;
+  font-size: 12px;
+  color: #a1d9ef;
+}
+
+.primary,
+.outline,
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 14px 23px;
+  border-radius: 8px;
+  font-weight: 600;
+  border: 1px solid #338dff;
+  min-height: 46px;
+  cursor: pointer;
+  font: inherit;
+  text-decoration: none;
+}
+.primary {
+  color: white;
+  background: linear-gradient(125deg, #0760ff, #148dff);
+  box-shadow: 0 4px 24px #0066ff20;
+}
+.primary:hover {
+  filter: brightness(1.13);
+}
+.outline {
+  background: #0a1422;
+  color: #eef4ff;
+  border-color: #324b6f;
+}
+.outline:hover {
+  background: #15263e;
+}
+.primary:disabled,
+.outline:disabled,
+.button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+footer {
+  display: flex;
+  gap: 36px;
+  align-items: center;
+  min-height: 110px;
+  font-size: 13px;
+}
+footer a {
+  color: inherit;
+  text-decoration: none;
+}
+footer .muted {
+  margin-left: auto;
+  color: #94a8c4;
+}
+
+.sectionline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.textbutton {
+  border: 0;
+  background: transparent;
+  padding: 8px 0;
+  text-align: left;
+  color: #65aeff;
+  font-size: 13px;
+  cursor: pointer;
+  font: inherit;
+}
+.textbutton:hover {
+  text-decoration: underline;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px;
+}
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 12px;
+  color: #becde3;
+  background: #0b1626;
+  border: 1px solid #2a405d;
+  border-radius: 7px;
+  font-size: 13px;
+  cursor: pointer;
+  font: inherit;
+  margin-top: 16px;
+}
+.chip:hover {
+  border-color: #5a9aff;
+}
+.miniicon {
+  display: inline-grid;
+  place-items: center;
+  min-width: 23px;
+  height: 23px;
+  padding-inline: 3px;
+  background: #174783;
+  border-radius: 4px;
+  color: #bfe2ff;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.modalbackdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  background: #000b;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+}
+.modal {
+  width: min(520px, 100%);
+  padding: 26px;
+  background: #111c2c;
+  border: 1px solid #2c415c;
+  border-radius: 12px;
+  color: #f2f6ff;
+}
+.modal h2 {
+  font-size: 21px;
+  margin: 0;
+}
+.modal p {
+  color: #afc0d6;
+  line-height: 1.6;
+}
+.modal label {
+  display: block;
+}
+.modal input {
+  display: block;
+  width: 100%;
+  background: transparent;
+  color: white;
+  font: inherit;
+  border: 1px solid #426084;
+  margin: 10px 0 20px;
+  padding: 14px;
+  border-radius: 7px;
+  box-sizing: border-box;
+}
+.modal input::placeholder {
+  color: #8ea4c2;
+}
+
+.stars {
+  margin-top: 6px;
+  margin-bottom: 16px;
+}
+.star {
+  font-size: 16px;
+  color: #4a5b78;
+  padding: 8px 10px;
+}
+.star.filled {
+  color: #ffc94d;
+  border-color: #ffc94d55;
+  background: #ffc94d1a;
+}
+
+@media (max-width: 950px) {
+  .navlinks {
+    display: none;
+  }
+  .badge {
+    display: none;
+  }
+}
+
+@media (max-width: 700px) {
+  .nav {
+    min-height: 72px;
+    gap: 10px;
+  }
+  .brand {
+    font-size: 17px;
+  }
+  .navright .primary {
+    padding: 10px 15px;
+    font-size: 13px;
+  }
+  footer {
+    padding-block: 25px;
+    flex-wrap: wrap;
+    gap: 20px;
+  }
+  footer .muted {
+    margin: 0;
+    width: 100%;
+  }
+}

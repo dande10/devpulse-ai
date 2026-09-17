@@ -13,11 +13,35 @@ class Settings(BaseSettings):
     tavily_retries: int = 2
     user_refresh_cooldown_seconds: int = 300
 
+    # Email notifications for feedback and technology requests. All optional —
+    # notifications are silently skipped (just logged) until these are set,
+    # so the feature works today and starts actually emailing the moment
+    # real SMTP credentials and a destination address are added.
+    smtp_host: str | None = None
+    smtp_port: int = 587
+    smtp_user: str | None = None
+    smtp_password: str | None = None
+    smtp_from_email: str | None = None
+    notify_email: str | None = None
+
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 
     @field_validator("cors_origins")
     @classmethod
     def clean_origins(cls, value: str) -> str:
+        return value
+
+    @field_validator("database_url")
+    @classmethod
+    def use_psycopg_driver(cls, value: str) -> str:
+        """Normalize managed-Postgres connection strings (e.g. Render's
+        "postgres://..." / "postgresql://...") to the psycopg3 driver this
+        app is built on, so a hosting provider's raw connection string works
+        without hand-editing."""
+        if value.startswith("postgres://"):
+            return "postgresql+psycopg://" + value[len("postgres://") :]
+        if value.startswith("postgresql://"):
+            return "postgresql+psycopg://" + value[len("postgresql://") :]
         return value
 
     @property

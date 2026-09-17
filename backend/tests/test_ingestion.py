@@ -4,7 +4,7 @@ from sqlalchemy.orm import sessionmaker
 
 from app.database.base import Base
 from app.ingestion.pipeline import IngestionPipeline
-from app.ingestion.processor import classify_category, classify_impact
+from app.ingestion.processor import classify_category, classify_impact, clean_content
 from app.models import DeveloperUpdate, Source, Technology
 from app.repositories.updates import UpdateRepository
 from app.services.normalize import content_fingerprint
@@ -60,11 +60,14 @@ class FakeTavily:
         self.search_calls = 0
         self.crawl_calls = 0
 
-    def search_updates(self, query: str, domains: list[str] | None = None, days: int = 30) -> dict:
+    def search_updates(self, query: str, domains: list[str] | None = None, days: int = 30, topic: str = "general") -> dict:
         self.search_calls += 1
         return {
             "results": [
-                {"url": "https://www.python.org/downloads/release/python-314?utm_source=x"},
+                {
+                    "url": "https://www.python.org/downloads/release/python-314?utm_source=x",
+                    "published_date": "Tue, 24 Feb 2026 00:00:00 GMT",
+                },
                 {"url": "https://evil.example/release"},
                 {"url": "https://blog.python.org/2026/08/python-release"},
             ]
@@ -80,7 +83,7 @@ class FakeTavily:
 
 
 class FailingTavily(FakeTavily):
-    def search_updates(self, query: str, domains: list[str] | None = None, days: int = 30) -> dict:
+    def search_updates(self, query: str, domains: list[str] | None = None, days: int = 30, topic: str = "general") -> dict:
         raise RuntimeError("search exploded")
 
 
@@ -100,7 +103,7 @@ def test_url_discovery_uses_search_and_crawl_for_trusted_urls(db) -> None:
     tavily = FakeTavily()
     pipeline = IngestionPipeline(db, tavily=tavily)
 
-    urls, found, note = pipeline._discover_urls(tech)
+    urls, found, note, url_dates = pipeline._discover_urls(tech)
 
     assert found == 3
     assert note is None
@@ -109,6 +112,7 @@ def test_url_discovery_uses_search_and_crawl_for_trusted_urls(db) -> None:
     assert "https://blog.python.org/2026/08/python-release" in urls
     assert "https://www.python.org/security" in urls
     assert all("evil.example" not in url for url in urls)
+    assert url_dates["https://www.python.org/downloads/release/python-314"] == "Tue, 24 Feb 2026 00:00:00 GMT"
 
 
 def test_url_duplicate_detection_counts_existing_urls(db) -> None:
@@ -142,7 +146,7 @@ def test_url_duplicate_detection_counts_existing_urls(db) -> None:
 def test_content_fingerprint_duplicate_detection(db) -> None:
     tech = save_technology(db)
     result = useful_result()
-    fingerprint = content_fingerprint(result["title"], result["raw_content"])
+    fingerprint = content_fingerprint(result["title"], clean_content(result["raw_content"]))
     source = Source(name="python.org", domain="python.org", source_type="trusted", official=True)
     db.add(source)
     db.flush()
@@ -161,7 +165,7 @@ def test_content_fingerprint_duplicate_detection(db) -> None:
     )
     db.commit()
 
-    saved, duplicates = IngestionPipeline(db, tavily=FakeTavily())._process_results(tech, [result])
+    saved, duplicates = IngestionPipeline(db, tavily=FakeTavily())._process_results(tech, [result], {})
 
     assert saved == 0
     assert duplicates == 1
@@ -183,7 +187,7 @@ def test_impact_classification() -> None:
 
 def test_saving_an_extracted_update(db) -> None:
     tech = save_technology(db)
-    saved, duplicates = IngestionPipeline(db, tavily=FakeTavily())._process_results(tech, [useful_result()])
+    saved, duplicates = IngestionPipeline(db, tavily=FakeTavily())._process_results(tech, [useful_result()], {})
 
     update = db.query(DeveloperUpdate).one()
     assert saved == 1

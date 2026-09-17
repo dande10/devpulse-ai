@@ -1,0 +1,385 @@
+/* Ported from the reference design (devpulse-react/styles.css), scoped
+   under .page so it only affects the Landing route's marketing sections
+   (hero, technology selector, example feed, how-it-works, CTA). Shared
+   chrome — header, footer, buttons, chips, modals — lives in chrome.css and
+   applies to every route so the header/footer/background stay identical. */
+
+html {
+  scroll-behavior: smooth;
+  scroll-padding-top: 90px;
+}
+
+.page {
+  position: relative;
+  isolation: isolate;
+  min-height: 100vh;
+  width: 100%;
+  overflow: clip;
+  margin: 0;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+.page button,
+.page input,
+.page a {
+  -webkit-tap-highlight-color: transparent;
+}
+.page button,
+.page input {
+  font: inherit;
+}
+.page button,
+.page a {
+  touch-action: manipulation;
+}
+.page button {
+  cursor: pointer;
+}
+.page a {
+  color: inherit;
+  text-decoration: none;
+}
+.page button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.page :focus-visible {
+  outline: 3px solid #a1c7ff;
+  outline-offset: 4px;
+}
+
+.page .hero {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: clamp(30px, 5vw, 100px);
+  align-items: center;
+  padding-block: 70px 45px;
+  min-height: 620px;
+}
+.page .eyebrow {
+  font-size: 11px;
+  letter-spacing: 2px;
+  color: #9fb8d9;
+  margin: 0 0 20px;
+}
+.page .hero h1 {
+  font-size: clamp(48px, 5.4vw, 100px);
+  line-height: 1.04;
+  letter-spacing: -0.055em;
+  margin: 0 0 25px;
+}
+.page .hero h1 span {
+  background: linear-gradient(90deg, #8d9eff, #258aff);
+  background-clip: text;
+  color: transparent;
+}
+.page .lead {
+  font-size: clamp(18px, 1.5vw, 25px);
+  line-height: 1.5;
+  color: #c0cee4;
+  max-width: 650px;
+}
+.page .muted,
+.page small {
+  color: #94a8c4;
+}
+.page .actions {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-top: 30px;
+}
+
+.page .panel {
+  border: 1px solid #2c415c;
+  background: linear-gradient(125deg, #101d2ad9, #0a1321dd);
+  border-radius: 12px;
+}
+.page .preview {
+  padding: 28px;
+  border-top-color: #70afff;
+  box-shadow: 0 0 35px #1266ff12;
+}
+.page h2 {
+  font-size: 21px;
+  margin: 0;
+}
+.page h3 {
+  font-size: 16px;
+  margin: 0;
+}
+.page .sectionline small {
+  font-size: 11px;
+}
+.page .previewrow {
+  display: flex;
+  gap: 20px;
+  padding-block: 24px;
+  border-bottom: 1px solid #26384f;
+}
+.page .previewrow:last-child {
+  border: 0;
+  padding-bottom: 0;
+}
+.page .previewrow p {
+  margin: 7px 0;
+  color: #9aafcc;
+  font-size: 14px;
+  line-height: 1.5;
+}
+.page .previewrow a {
+  color: #65aeff;
+  font-size: 13px;
+}
+.page .techicon {
+  font-size: 26px;
+  color: #7bbcfd;
+  font-weight: 700;
+  padding-top: 3px;
+}
+
+.page .selector {
+  padding: 26px;
+}
+.page .search {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 22px;
+  padding: 0 16px;
+  background: #091321;
+  border: 1px solid #344c70;
+  border-radius: 8px;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.page .search:focus-within {
+  border-color: #5a9aff;
+  box-shadow: 0 0 0 3px #5a9aff33;
+}
+.page .search input:focus-visible {
+  outline: none;
+}
+.page .search span {
+  font-size: 28px;
+  color: #8fbae9;
+}
+.page input {
+  width: 100%;
+  background: transparent;
+  color: white;
+  border: 0;
+  padding: 15px 0;
+  outline-offset: 0;
+}
+.page input::placeholder {
+  color: #8ea4c2;
+}
+.page .categories .chip {
+  border-radius: 30px;
+  padding: 6px 17px;
+}
+.page .active {
+  background: linear-gradient(135deg, #0358f5, #16bcf6);
+  color: white;
+  border-color: #5bb8ff;
+}
+.page .selected {
+  background: #142e4d;
+  border-color: #5c96e4;
+  color: #fff;
+}
+.page .selectionfooter {
+  margin-top: 20px;
+}
+
+.page .section {
+  padding-top: 44px;
+}
+.page .sectiontitle {
+  font-size: clamp(25px, 2.4vw, 38px);
+  letter-spacing: -0.025em;
+}
+.page .grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 22px;
+  margin-top: 25px;
+}
+.page .update {
+  padding: 26px;
+  display: flex;
+  flex-direction: column;
+}
+.page .pill {
+  font-size: 11px;
+  border: 1px solid #44627a;
+  padding: 5px 12px;
+  border-radius: 20px;
+  color: #a5c7e3;
+}
+.page .cardtitle {
+  font-size: 20px;
+  margin-top: 25px;
+}
+.page .update p,
+.page .step p {
+  color: #a5b8d1;
+  line-height: 1.6;
+  margin-top: 10px;
+}
+.page .source {
+  border-top: 1px solid #2b3c53;
+  display: flex;
+  justify-content: space-between;
+  margin-top: auto;
+  padding-top: 17px;
+  color: #6fb6ff;
+  font-size: 13px;
+}
+.page .step {
+  padding: 26px;
+  display: flex;
+  align-items: flex-start;
+  gap: 20px;
+}
+.page .step p {
+  font-size: 14px;
+  margin-bottom: 0;
+}
+.page .number {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #127aec, #5830d6);
+}
+
+.page .cta {
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  margin-top: 38px;
+  padding: 34px;
+  background: radial-gradient(ellipse at 65% 15%, #134eb34d, transparent 65%), #0b1524;
+}
+.page .cta h2 {
+  font-size: 30px;
+}
+.page .cta h2 span {
+  color: #508fff;
+}
+.page .cta p {
+  margin-bottom: 0;
+}
+.page .cta > div:last-child {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.page .empty {
+  padding: 30px;
+  color: #b8c9e0;
+}
+
+@media (min-width: 1800px) {
+  .page .hero {
+    min-height: 760px;
+  }
+  .page .previewrow {
+    padding-block: 32px;
+  }
+  .page .previewrow p {
+    font-size: 17px;
+  }
+  .page .previewrow h3 {
+    font-size: 20px;
+  }
+}
+
+@media (max-width: 950px) {
+  .page .hero {
+    gap: 28px;
+  }
+  .page .hero h1 {
+    font-size: 55px;
+  }
+  .page .grid {
+    gap: 12px;
+  }
+  .page .step {
+    flex-direction: column;
+    padding: 20px;
+  }
+  .page .update {
+    padding: 20px;
+  }
+  .page .technology {
+    font-size: 12px;
+  }
+}
+
+@media (max-width: 700px) {
+  .page .hero {
+    grid-template-columns: 1fr;
+    padding-top: 44px;
+    gap: 34px;
+  }
+  .page .hero h1 {
+    font-size: 56px;
+  }
+  .page .lead {
+    font-size: 18px;
+  }
+  .page .preview {
+    padding: 22px;
+  }
+  .page .sectionline {
+    flex-wrap: wrap;
+  }
+  .page .selector {
+    padding: 20px;
+  }
+  .page .grid {
+    grid-template-columns: 1fr;
+    gap: 15px;
+  }
+  .page .step {
+    flex-direction: row;
+  }
+  .page .cta {
+    align-items: flex-start;
+    flex-direction: column;
+    padding: 25px;
+  }
+  .page .cta h2 {
+    font-size: 26px;
+  }
+  .page .cta > div:last-child {
+    width: 100%;
+  }
+  .page .actions {
+    flex-direction: column;
+  }
+  .page .actions > * {
+    width: 100%;
+  }
+  .page .selectionfooter {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .page .sectiontitle {
+    font-size: 27px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+}

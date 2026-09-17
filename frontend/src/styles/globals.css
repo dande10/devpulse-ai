@@ -2,31 +2,69 @@
 @tailwind components;
 @tailwind utilities;
 
+/* DevPulse is dark-only — no light theme. */
 :root {
-  --background: 210 33% 98%;
-  --foreground: 222 47% 13%;
-  --card: 0 0% 100%;
-  --muted: 214 32% 91%;
-  --border: 214 32% 88%;
-  --primary: 217 91% 53%;
-  --accent: 263 68% 58%;
+  --background: 224 45% 7%;
+  --foreground: 210 40% 96%;
+  --card: 222 39% 12%;
+  --muted: 217 30% 19%;
+  --border: 217 28% 22%;
+  --primary: 217 91% 63%;
+  --primary-strong: 224 78% 50%;
+  --accent: 269 92% 75%;
+  --success: 152 55% 52%;
+  --warning: 38 92% 60%;
+  --danger: 0 84% 68%;
 }
 
-.dark {
-  --background: 222 47% 8%;
-  --foreground: 210 40% 96%;
-  --card: 222 41% 12%;
-  --muted: 217 33% 22%;
-  --border: 217 33% 24%;
-  --primary: 213 94% 68%;
-  --accent: 269 92% 75%;
+* {
+  border-color: hsl(var(--border));
+}
+
+html {
+  min-height: 100%;
 }
 
 body {
   margin: 0;
-  background: hsl(var(--background));
-  color: hsl(var(--foreground));
+  min-height: 100vh;
+  background-color: #070d19;
+  background-image: radial-gradient(ellipse at 90% 12%, #3525a52b, transparent 35%),
+    radial-gradient(ellipse at 30% 35%, #0077ff17, transparent 48%);
+  background-attachment: fixed;
+  color: #f5f7ff;
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Ambient grid + glow arc — the same decorative layer the home page has
+   always used, applied to <body> (fixed, viewport-sized) so every route
+   shares the exact same background. */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-image: linear-gradient(rgba(122, 164, 235, 0.024) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(122, 164, 235, 0.024) 1px, transparent 1px);
+  background-size: 42px 42px;
+  mask-image: linear-gradient(#000, transparent 85%);
+  -webkit-mask-image: linear-gradient(#000, transparent 85%);
+}
+body::after {
+  content: "";
+  position: fixed;
+  top: 100px;
+  right: -20%;
+  width: 90%;
+  height: 600px;
+  z-index: -1;
+  pointer-events: none;
+  border-top: 1px solid #498aff66;
+  border-radius: 50%;
+  transform: rotate(-24deg);
+  box-shadow: 0 -18px 60px -25px #1666ff;
 }
 
 button,
@@ -35,9 +73,24 @@ input {
   outline-offset: 3px;
 }
 
+.gradient-text {
+  background: linear-gradient(90deg, hsl(var(--primary-strong)), hsl(var(--accent)));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.gradient-ring {
+  background: linear-gradient(135deg, hsl(var(--primary)), hsl(var(--accent)));
+}
+
 .line-clamp-4 {
   display: -webkit-box;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 4;
   overflow: hidden;
+}
+
+::selection {
+  background: hsl(var(--primary) / 0.25);
 }

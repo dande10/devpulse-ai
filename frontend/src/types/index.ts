@@ -49,6 +49,24 @@ export type FeedResponse = {
   cooldown_until: string | null;
 };
 
+export type TechnologyRequest = {
+  id: number;
+  name: string;
+  note: string | null;
+  request_count: number;
+  status: "pending" | "approved" | "rejected";
+  created_at: string;
+  updated_at: string;
+};
+
+export type Review = {
+  id: number;
+  name: string | null;
+  rating: number | null;
+  message: string;
+  created_at: string;
+};
+
 export type RefreshStatus = {
   running: boolean;
   last_started_at: string | null;
