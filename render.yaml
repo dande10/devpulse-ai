@@ -34,6 +34,8 @@ services:
         sync: false
       - key: NOTIFY_EMAIL
         sync: false
+      - key: ADMIN_TOKEN
+        sync: false
 
   - type: web
     name: devpulse-frontend

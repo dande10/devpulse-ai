@@ -24,6 +24,11 @@ class Settings(BaseSettings):
     smtp_from_email: str | None = None
     notify_email: str | None = None
 
+    # Shared-secret header required on every /api/admin/* route (see
+    # app/api/admin_auth.py). Unset means those routes reject every request —
+    # there is no "admin mode without a token" fallback.
+    admin_token: str | None = None
+
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 
     @field_validator("cors_origins")

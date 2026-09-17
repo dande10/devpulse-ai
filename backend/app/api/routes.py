@@ -4,6 +4,7 @@ from fastapi import APIRouter, Body, Depends, HTTPException, Query
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session, joinedload
 
+from app.api.admin_auth import require_admin
 from app.core.config import settings
 from app.database.session import get_db
 from app.ingestion.pipeline import IngestionPipeline
@@ -88,7 +89,7 @@ def create_feedback(payload: FeedbackCreate, db: Session = Depends(get_db)) -> F
     return feedback
 
 
-@router.get("/admin/feedback", response_model=list[FeedbackRead])
+@router.get("/admin/feedback", response_model=list[FeedbackRead], dependencies=[Depends(require_admin)])
 def admin_list_feedback(db: Session = Depends(get_db)) -> list[Feedback]:
     """Full review queue (every status) for local admin moderation."""
     return db.query(Feedback).order_by(Feedback.created_at.desc()).all()
@@ -106,7 +107,7 @@ def public_reviews(db: Session = Depends(get_db)) -> list[Feedback]:
     )
 
 
-@router.post("/admin/feedback/{feedback_id}/status", response_model=FeedbackRead)
+@router.post("/admin/feedback/{feedback_id}/status", response_model=FeedbackRead, dependencies=[Depends(require_admin)])
 def admin_update_feedback_status(feedback_id: int, status: str = Body(embed=True), db: Session = Depends(get_db)) -> Feedback:
     """Approve/reject a review. Approving emails the full review to the admin inbox."""
     if status not in {"pending", "approved", "rejected"}:
@@ -137,13 +138,17 @@ def list_technology_requests(db: Session = Depends(get_db)) -> list[TechnologyRe
     )
 
 
-@router.get("/admin/technology-requests", response_model=list[TechnologyRequestRead])
+@router.get("/admin/technology-requests", response_model=list[TechnologyRequestRead], dependencies=[Depends(require_admin)])
 def admin_list_technology_requests(db: Session = Depends(get_db)) -> list[TechnologyRequest]:
     """Full queue (every status) for the admin reviewing requests locally."""
     return db.query(TechnologyRequest).order_by(TechnologyRequest.request_count.desc(), TechnologyRequest.created_at.desc()).all()
 
 
-@router.post("/admin/technology-requests/{request_id}/status", response_model=TechnologyRequestRead)
+@router.post(
+    "/admin/technology-requests/{request_id}/status",
+    response_model=TechnologyRequestRead,
+    dependencies=[Depends(require_admin)],
+)
 def admin_update_technology_request_status(request_id: int, status: str = Body(embed=True), db: Session = Depends(get_db)) -> TechnologyRequest:
     """Mark a request approved/rejected/pending. Adding the actual Technology is a separate, manual seed.py change."""
     if status not in {"pending", "approved", "rejected"}:
@@ -318,7 +323,7 @@ def request_refresh(technology_slugs: list[str] | None = Body(default=None)) -> 
     return {"started": started, "message": message, **refresh_coordinator.status()}
 
 
-@router.post("/admin/refresh")
+@router.post("/admin/refresh", dependencies=[Depends(require_admin)])
 def admin_refresh(technology_slugs: list[str] | None = None, db: Session = Depends(get_db)) -> dict:
     """Manual refresh endpoint for debugging or operational use."""
     seed_database(db)
@@ -326,7 +331,7 @@ def admin_refresh(technology_slugs: list[str] | None = None, db: Session = Depen
     return {"runs": [{"id": run.id, "status": run.status, "error_message": run.error_message} for run in runs]}
 
 
-@router.get("/admin/ingestion-runs")
+@router.get("/admin/ingestion-runs", dependencies=[Depends(require_admin)])
 def ingestion_runs(db: Session = Depends(get_db)) -> list[dict]:
     """Return recent ingestion history: saved count, duplicates, failures, timing."""
     seed_database(db)
